@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::future::Future;
 use chrono::Utc;
+use uuid::Uuid;
 use atropos::domain::{
     pool::Pool, resource::Resource, lease::Lease,
     PoolId, ResourceId, LeaseId,
@@ -10,13 +11,17 @@ use atropos::domain::{
     error::DomainError, repository::{PoolRepository, ResourceRepository, AllocationRepository}
 };
 use atropos::application::allocation_service::AllocationService;
+use atropos::domain::repository::{AuditLogEntry, SummaryStats};
 
 // --- A Robust Mock Repository for Testing ---
 #[derive(Default, Clone, Debug)]
 struct MockRepository {
     available_resources: Arc<Mutex<i32>>,
+    total_resources: Arc<Mutex<i32>>,
     leases: Arc<Mutex<HashMap<String, Lease>>>, // By ID string
     idempotency_map: Arc<Mutex<HashMap<String, Lease>>>, // By Key string
+    audit_logs: Arc<Mutex<Vec<AuditLogEntry>>>,
+    waitlist_count: Arc<Mutex<i32>>,
 }
 
 impl PoolRepository for MockRepository {
@@ -32,6 +37,7 @@ impl AllocationRepository for MockRepository {
         let available_ref = self.available_resources.clone();
         let leases_ref = self.leases.clone();
         let idem_ref = self.idempotency_map.clone();
+        let audit_ref = self.audit_logs.clone();
         
         async move {
             // Check Idempotency
@@ -48,7 +54,7 @@ impl AllocationRepository for MockRepository {
                 let lease = Lease {
                     id: LeaseId::new(),
                     resource_id: ResourceId::new(),
-                    owner_id: owner,
+                    owner_id: owner.clone(),
                     tenant_id: tenant,
                     status: LeaseStatus::Active,
                     created_at: Utc::now(),
@@ -61,6 +67,16 @@ impl AllocationRepository for MockRepository {
                 if let Some(k) = key {
                     idem_ref.lock().unwrap().insert(k, lease.clone());
                 }
+
+                // Add audit log
+                audit_ref.lock().unwrap().push(AuditLogEntry {
+                    id: 1_i64,
+                    actor_id: Some(owner),
+                    action: Some("ALLOCATE".to_string()),
+                    resource_id: Some(lease.resource_id.0),
+                    created_at: Utc::now(),
+                });
+
                 Ok(lease)
             } else {
                 Err(DomainError::NoResourcesAvailable)
@@ -100,9 +116,35 @@ impl AllocationRepository for MockRepository {
         _tenant_id: String,
         _priority: i32
     ) -> impl Future<Output = Result<(), DomainError>> + Send {
+        let wait_ref = self.waitlist_count.clone();
         async move {
-            // Mock always succeeds in waitlisting for tests
+            let mut count = wait_ref.lock().unwrap();
+            *count += 1;
             Ok(())
+        }
+    }
+
+    fn get_summary_stats(&self) -> impl Future<Output=Result<SummaryStats, DomainError>> + Send {
+        let leases = self.leases.clone();
+        let total = self.total_resources.clone();
+        let healthy = self.available_resources.clone();
+        let wait = self.waitlist_count.clone();
+        async move {
+            Ok(SummaryStats {
+                active_leases: leases.lock().unwrap().len() as i64,
+                total_resources: *total.lock().unwrap() as i64,
+                healthy_resources: *healthy.lock().unwrap() as i64,
+                waitlist_count: *wait.lock().unwrap() as i64,
+            })
+        }
+    }
+
+    fn get_recent_audit_logs(&self, limit: i64) -> impl Future<Output=Result<Vec<AuditLogEntry>, DomainError>> + Send {
+        let logs = self.audit_logs.clone();
+        async move {
+            let logs = logs.lock().unwrap();
+            let count = (limit as usize).min(logs.len());
+            Ok(logs[logs.len() - count..].to_vec())
         }
     }
 }
@@ -113,6 +155,8 @@ struct AtroposWorld {
     repo: MockRepository,
     last_results: Vec<Result<Lease, DomainError>>,
     last_op_result: Option<Result<(), DomainError>>,
+    last_stats: Option<SummaryStats>,
+    last_logs: Vec<AuditLogEntry>,
 }
 
 #[given(expr = "a resource pool {string} exists")]
@@ -122,6 +166,7 @@ fn pool_exists(_world: &mut AtroposWorld, _name: String) {}
 #[given(expr = "the pool has {int} {string} GPU resources")]
 fn set_available(world: &mut AtroposWorld, count: i32, _status: String) {
     *world.repo.available_resources.lock().unwrap() = count;
+    *world.repo.total_resources.lock().unwrap() = count;
 }
 
 #[when(expr = "a research team {string} requests 1 GPU")]
@@ -130,6 +175,11 @@ async fn request_gpu(world: &mut AtroposWorld, team: String) {
     let service = AllocationService::new(Arc::new(world.repo.clone()));
     let res = service.allocate("GPU".into(), "user-01".into(), team, 60, None, None, None).await;
     world.last_results.push(res);
+}
+
+#[when(expr = "a team {string} allocates a GPU")]
+async fn team_allocates_gpu(world: &mut AtroposWorld, team: String) {
+    request_gpu(world, team).await;
 }
 
 #[when(expr = "a team {string} requests a GPU with idempotency key {string}")]
@@ -196,6 +246,7 @@ fn check_idem(world: &mut AtroposWorld, match_type: String) {
 #[given(expr = "a research team has an {string} lease for a GPU")]
 async fn given_active_lease(world: &mut AtroposWorld, _status: String) {
     *world.repo.available_resources.lock().unwrap() = 1;
+    *world.repo.total_resources.lock().unwrap() = 1;
     request_gpu(world, "team-01".into()).await;
 }
 
@@ -225,12 +276,80 @@ async fn release_non_existent(world: &mut AtroposWorld) {
     world.last_op_result = Some(res);
 }
 
+#[when(expr = "they release the active lease")]
+async fn release_active_lease(world: &mut AtroposWorld) {
+    let lease = world.last_results.last().unwrap().as_ref().unwrap();
+    let service = AllocationService::new(Arc::new(world.repo.clone()));
+    let res = service.release(lease.id).await;
+    world.last_op_result = Some(res);
+}
+
+#[then(expr = "the release should be {string}")]
+fn check_release_result(world: &mut AtroposWorld, expected: String) {
+    let actual = world.last_op_result.as_ref().unwrap();
+    if expected == "Successful" {
+        assert!(actual.is_ok());
+    }
+}
+
 #[then(expr = "the result should be {string}")]
 fn check_op_result(world: &mut AtroposWorld, expected: String) {
     let actual = world.last_op_result.as_ref().unwrap();
     if expected == "Not Found" {
         assert!(matches!(actual, Err(DomainError::LeaseNotFound)));
     }
+}
+
+// --- Observability Steps ---
+#[given(expr = "the resource pool {string} exists with {int} healthy resources")]
+fn pool_exists_with_resources(world: &mut AtroposWorld, _name: String, count: i32) {
+    *world.repo.available_resources.lock().unwrap() = count;
+    *world.repo.total_resources.lock().unwrap() = count;
+}
+
+#[given(expr = "there is {int} active lease for {string}")]
+async fn given_n_active_leases(world: &mut AtroposWorld, count: i32, team: String) {
+    for _ in 0..count {
+        request_gpu(world, team.clone()).await;
+    }
+}
+
+#[when(expr = "the administrator requests summary statistics")]
+async fn admin_requests_stats(world: &mut AtroposWorld) {
+    let service = AllocationService::new(Arc::new(world.repo.clone()));
+    world.last_stats = Some(service.get_stats().await.unwrap());
+}
+
+#[then(expr = "the active lease count should be {int}")]
+fn check_active_leases(world: &mut AtroposWorld, expected: i32) {
+    assert_eq!(world.last_stats.as_ref().unwrap().active_leases, expected as i64);
+}
+
+#[then(expr = "the total healthy resource count should be {int}")]
+fn check_healthy_resources(world: &mut AtroposWorld, expected: i32) {
+    assert_eq!(world.last_stats.as_ref().unwrap().healthy_resources, expected as i64);
+}
+
+#[then(expr = "the waitlist count should be {int}")]
+fn check_waitlist_count(world: &mut AtroposWorld, expected: i32) {
+    assert_eq!(world.last_stats.as_ref().unwrap().waitlist_count, expected as i64);
+}
+
+#[when(expr = "the administrator requests recent audit logs")]
+async fn admin_requests_logs(world: &mut AtroposWorld) {
+    let service = AllocationService::new(Arc::new(world.repo.clone()));
+    world.last_logs = service.get_recent_logs(10).await.unwrap();
+}
+
+#[then(expr = "the latest audit log should show {string}")]
+fn check_latest_log_action(world: &mut AtroposWorld, action: String) {
+    assert_eq!(world.last_logs.last().unwrap().action.as_deref(), Some(action.as_str()));
+}
+
+#[then(expr = "the logs should contain at least {int} entry")]
+#[then(expr = "the logs should contain at least {int} entries")]
+fn check_log_count(world: &mut AtroposWorld, count: i32) {
+    assert!(world.last_logs.len() >= count as usize);
 }
 
 #[cfg(test)]
@@ -242,5 +361,6 @@ mod tests {
         // Run both feature files
         AtroposWorld::run("tests/features/allocation.feature").await;
         AtroposWorld::run("tests/features/lifecycle.feature").await;
+        AtroposWorld::run("tests/features/observability.feature").await;
     }
 }

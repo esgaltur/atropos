@@ -14,7 +14,7 @@ Note: Only the latest minor release receives security patches. Users are encoura
 
 **Please do NOT open a public GitHub Issue for security vulnerabilities.**
 
-If you discover a potential security vulnerability in Atropos, please report it privately via email to: `security@atropos-project.dev`.
+If you discover a potential security vulnerability in Atropos, please report it privately via email to: `security@esgaltur.dev`.
 
 When reporting a vulnerability, please include the following information:
 

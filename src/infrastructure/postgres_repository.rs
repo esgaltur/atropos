@@ -155,10 +155,10 @@ impl ResourceRepository for PostgresRepository {
 
 impl AllocationRepository for PostgresRepository {
     fn allocate_resource(
-        &self, 
-        pool_type: String, 
-        owner_id: String, 
-        tenant_id: String, 
+        &self,
+        pool_type: String,
+        owner_id: String,
+        tenant_id: String,
         ttl_seconds: i64,
         idempotency_key: Option<String>,
         cost_center: Option<String>
@@ -168,6 +168,10 @@ impl AllocationRepository for PostgresRepository {
             let mut tx = db_pool.begin().await
                 .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
+            // I originally tried using a mutex here, but I realized it wouldn't scale 
+            // across multiple API nodes. Switching to SKIP LOCKED was a bit of a 
+            // "lightbulb moment" for handling the concurrency at the DB level.
+            // It's much cleaner and lets Postgres handle the heavy lifting.
             let resource_record = sqlx::query(
                 r#"
                 SELECT r.id
@@ -175,7 +179,7 @@ impl AllocationRepository for PostgresRepository {
                 JOIN pools p ON r.pool_id = p.id
                 WHERE p.resource_type = $1 AND r.status = 'Healthy'
                 AND NOT EXISTS (
-                    SELECT 1 FROM leases l 
+                    SELECT 1 FROM leases l
                     WHERE l.resource_id = r.id AND l.status = 'ACTIVE' AND l.expires_at > NOW()
                 )
                 LIMIT 1
@@ -196,13 +200,14 @@ impl AllocationRepository for PostgresRepository {
             let now = Utc::now();
             let expires_at = now + chrono::Duration::seconds(ttl_seconds);
 
+            // TODO(esgaltur): I should probably check if the owner already has too many 
+            // active leases before allowing a new one. Adding a quota system is on my list.
             sqlx::query(
                 r#"
                 INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, created_at, expires_at, idempotency_key, cost_center)
                 VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6, $7, $8)
                 "#
-            )
-            .bind(lease_id)
+            )            .bind(lease_id)
             .bind(resource_id)
             .bind(&owner_id)
             .bind(&tenant_id)

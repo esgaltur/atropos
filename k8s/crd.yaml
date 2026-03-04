@@ -14,20 +14,70 @@ spec:
           properties:
             spec:
               type: object
+              required:
+                - poolType
+                - ttlSeconds
+                - ownerId
+                - tenantId
               properties:
                 poolType:
                   type: string
+                  description: The type of resource pool to allocate from (e.g., "A100-GPU").
                 ttlSeconds:
                   type: integer
+                  description: Duration in seconds for which the resource is leased.
+                ownerId:
+                  type: string
+                  description: The identifier of the entity requesting the resource.
                 tenantId:
                   type: string
+                  description: The project or tenant context for the allocation.
+                constraints:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  description: Optional constraints for resource selection.
+                idempotencyKey:
+                  type: string
+                  description: Optional key to prevent double-allocations on retry.
+                waitlist:
+                  type: boolean
+                  default: false
+                  description: If true, request is added to a waitlist when no resources are available.
+                preempt:
+                  type: boolean
+                  default: false
+                  description: If true, may reclaim resources from lower-priority leases.
+                costCenter:
+                  type: string
+                  description: Optional cost center for billing/chargeback.
             status:
               type: object
               properties:
                 leaseId:
                   type: string
+                  description: The UUID of the granted lease.
+                resourceId:
+                  type: string
+                  description: The UUID of the allocated resource.
                 status:
                   type: string
+                  enum:
+                    - Pending
+                    - Active
+                    - Expiring
+                    - Released
+                    - Expired
+                    - Revoked
+                    - Waiting
+                  description: Current status of the lease.
+                createdAt:
+                  type: string
+                  format: date-time
+                  description: Timestamp when the lease was created.
+                expiresAt:
+                  type: string
+                  format: date-time
+                  description: Timestamp when the lease expires.
   scope: Namespaced
   names:
     plural: resourceclaims

@@ -27,3 +27,11 @@ Feature: GPU Cluster Resource Management
     When a team "CERN" requests a GPU with waitlist enabled
     Then the allocation should be "Denied"
     And the reason should be "Infrastructure error: Added to waitlist"
+
+  Scenario: Preemption when pool is full
+    Given a resource pool "A100-Cluster" exists
+    And the pool has 0 "Healthy" GPU resources
+    When a team "DARPA" requests a GPU with preempt enabled
+    Then the allocation should be "Denied"
+    And the reason should be "Infrastructure error: Preemption required but logic in repo is pending"
+

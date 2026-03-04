@@ -1,8 +1,7 @@
 # This file speeds up the linking phase on Windows if LLD is installed.
-# To install LLD: scoop install llvm  OR  choco install llvm
 [build]
 target-dir = "target"
 
 [target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"
+linker = "C:\\Program Files\\LLVM\\bin\\lld-link.exe"
 # rustflags = ["-Zshare-generics=y"] # Removed as it requires Nightly

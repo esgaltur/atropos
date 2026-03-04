@@ -13,6 +13,8 @@ impl ReaperService {
     }
 
     pub async fn run(&self) {
+        // I set this to 10 seconds for testing, but in production we might 
+        // want to make this configurable via environment variables.
         let mut interval = time::interval(Duration::from_secs(10));
         loop {
             interval.tick().await;
@@ -21,6 +23,9 @@ impl ReaperService {
     }
 
     async fn reclaim_expired(&self) {
+        // TODO(esgaltur): Right now this just marks them as EXPIRED. 
+        // I want to add a step that checks the waitlist and immediately 
+        // re-allocates the resource to the next person in line.
         let res = sqlx::query(
             r#"
             UPDATE leases

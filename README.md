@@ -2,10 +2,15 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust CI](https://github.com/atropos-project/atropos/actions/workflows/ci.yml/badge.svg)](https://github.com/atropos-project/atropos/actions/workflows/ci.yml)
+[![Rust CI](https://github.com/esgaltur/atropos/actions/workflows/ci.yml/badge.svg)](https://github.com/esgaltur/atropos/actions/workflows/ci.yml)
 [![Architecture: Hexagonal](https://img.shields.io/badge/Architecture-Hexagonal-green.svg)](#architecture)
 
 A high-performance, strictly consistent **Resource Leasing & Capacity Orchestration Platform** built in Rust. It enables teams to allocate, reserve, and govern scarce or shared resources (e.g., GPUs, license tokens, test environments) with strong linearizable guarantees.
+
+---
+
+### 📖 [Read the User & Use Case Guide](USER_GUIDE.md)
+*Learn why Atropos exists, how to use it for GPU clusters, CI/CD farms, and license management.*
 
 ---
 
@@ -60,7 +65,7 @@ For deep technical insights, Architecture Decision Records (ADRs), and operation
 ### Local Setup
 1.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/atropos-project/atropos.git
+    git clone https://github.com/esgaltur/atropos.git
     cd atropos
     ```
 
