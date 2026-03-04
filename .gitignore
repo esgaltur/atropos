@@ -1,0 +1,62 @@
+# ========================
+# Rust / Cargo
+# ========================
+/target/
+/target-check/
+/target-release/
+/target-test/
+**/*.rs.bk
+*.pdb
+
+# ========================
+# Build artifacts
+# ========================
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+dist/.env
+
+# ========================
+# IDE / Editor
+# ========================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.iml
+
+# ========================
+# OS generated files
+# ========================
+Thumbs.db
+Desktop.ini
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# ========================
+# Docker (local volumes)
+# ========================
+docker-data/
+postgres-data/
+
+# ========================
+# Misc
+# ========================
+*.log
+*.tmp
+*.bak
+*.orig
+
+/agents/
+/dist/

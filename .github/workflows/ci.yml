@@ -1,0 +1,60 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: resource_allocator
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Check Formatting
+      run: cargo fmt --all -- --check
+
+    - name: Lint with Clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+    - name: Install sqlx-cli
+      run: cargo install sqlx-cli --no-default-features --features postgres
+
+    - name: Run Database Migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/resource_allocator
+      run: sqlx migrate run
+
+    - name: Run Tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/resource_allocator
+      run: cargo test --verbose

@@ -1,0 +1,146 @@
+openapi: 3.0.0
+info:
+  title: Atropos Resource Orchestration API
+  version: 1.0.0
+  description: >-
+    A high-performance platform that allocates, reserves, and governs scarce/shared resources.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      responses:
+        '200':
+          description: Server is healthy
+
+  /pools:
+    post:
+      summary: Create a Resource Pool
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                resource_type: { type: string }
+                policy: { type: string, enum: [FIFO, LRU, Random] }
+      responses:
+        '200':
+          description: Pool Created
+
+  /resources:
+    post:
+      summary: Register a Resource
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pool_id: { type: string, format: uuid }
+                external_id: { type: string }
+                attributes: { type: object }
+      responses:
+        '200':
+          description: Resource Registered
+
+  /leases:
+    post:
+      summary: Allocate a Lease
+      operationId: allocateLease
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pool_type
+                - ttl_seconds
+                - owner_id
+                - tenant_id
+              properties:
+                pool_type: { type: string }
+                constraints: { type: object }
+                ttl_seconds: { type: integer }
+                idempotency_key: { type: string }
+                waitlist: { type: boolean, default: false }
+                preempt: { type: boolean, default: false }
+                owner_id: { type: string }
+                tenant_id: { type: string }
+      responses:
+        '200':
+          description: Lease Granted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lease'
+        '409':
+          description: No Resources Available
+
+  /leases/{id}:
+    delete:
+      summary: Release a Lease
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Lease Released
+        '404':
+          description: Lease Not Found
+
+  /leases/{id}/renew:
+    post:
+      summary: Renew an existing Lease
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                extension_seconds: { type: integer }
+      responses:
+        '200':
+          description: Lease Renewed
+        '404':
+          description: Lease Not Found or Not Active
+
+components:
+  schemas:
+    Lease:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        resource_id: { type: string, format: uuid }
+        owner_id: { type: string }
+        tenant_id: { type: string }
+        status: { type: string, enum: [Pending, Active, Expiring, Released, Expired, Revoked, Waiting] }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    
+    Resource:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        pool_id: { type: string, format: uuid }
+        external_id: { type: string }
+        status: { type: string, enum: [Healthy, Unhealthy, Draining, Disabled, Cooldown] }
+        attributes: { type: object }
+        version: { type: integer }
+        updated_at: { type: string, format: date-time }

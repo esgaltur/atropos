@@ -1,0 +1,23 @@
+syntax = "proto3";
+package atropos.v1;
+
+service AllocationService {
+    // High-speed binary allocation endpoint
+    rpc Allocate (AllocateRequest) returns (AllocateResponse);
+}
+
+message AllocateRequest {
+    string pool_type = 1;
+    int64 ttl_seconds = 2;
+    string owner_id = 3;
+    string tenant_id = 4;
+    optional string idempotency_key = 5;
+    bool waitlist = 6;
+    bool preempt = 7;
+}
+
+message AllocateResponse {
+    string lease_id = 1;
+    string resource_id = 2;
+    string status = 3;
+}
