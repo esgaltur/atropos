@@ -14,13 +14,14 @@ Atropos is a high-performance resource orchestration platform that provides stri
 
 ## Core Value Proposition
 - **Guaranteed Consistency:** Atomic allocation using PostgreSQL `SKIP LOCKED` ensures resources are never over-allocated.
-- **Automated Lifecycle:** Built-in reaper service reclaims expired leases, preventing resource leakage.
+- **Automated Lifecycle:** Built-in reaper service reclaims expired leases and automatically fulfills waitlists, ensuring maximum resource utilization.
 - **Architectural Rigor:** Hexagonal architecture ensures the system is maintainable, testable, and future-proof.
 - **Operational Visibility:** Native Prometheus metrics and structured tracing for deep observability.
 
 ## Key Features
 - **Atomic Resource Allocation:** Linearizable allocation of pool resources.
 - **Time-Bound Leasing:** Automated reclamation of resources via TTL.
+- **Automatic Waitlist Fulfillment:** Instant reallocation of freed resources to high-priority waitlisted users during reclamation or manual release.
 - **Hexagonal Architecture:** Strict separation between domain logic and infrastructure.
 - **Type-Safe Domain:** Newtype patterns for all entity IDs (`PoolId`, `ResourceId`, `LeaseId`).
 - **High Concurrency Support:** Built with Rust, Tokio, and SQLx for scale.
