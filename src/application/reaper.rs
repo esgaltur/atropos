@@ -22,7 +22,7 @@ impl ReaperService {
         }
     }
 
-    async fn reclaim_expired(&self) {
+    pub async fn reclaim_expired(&self) {
         // TODO(esgaltur): Right now this just marks them as EXPIRED. 
         // I want to add a step that checks the waitlist and immediately 
         // re-allocates the resource to the next person in line.
