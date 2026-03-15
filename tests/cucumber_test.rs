@@ -147,6 +147,13 @@ impl AllocationRepository for MockRepository {
             Ok(logs[logs.len() - count..].to_vec())
         }
     }
+
+    fn fulfill_next_waitlist_entry(
+        &self,
+        _pool_type: String
+    ) -> impl Future<Output = Result<Option<Lease>, DomainError>> + Send {
+        async { Ok(None) }
+    }
 }
 
 // --- Cucumber World ---

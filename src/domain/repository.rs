@@ -43,6 +43,13 @@ pub trait AllocationRepository: Send + Sync {
     fn get_summary_stats(&self) -> impl Future<Output = Result<SummaryStats, DomainError>> + Send;
 
     fn get_recent_audit_logs(&self, limit: i64) -> impl Future<Output = Result<Vec<AuditLogEntry>, DomainError>> + Send;
+
+    /// Attempts to fulfill the next pending waitlist entry for a given pool type.
+    /// If a resource is available, it creates a lease and returns it.
+    fn fulfill_next_waitlist_entry(
+        &self,
+        pool_type: String
+    ) -> impl Future<Output = Result<Option<Lease>, DomainError>> + Send;
 }
 
 #[derive(serde::Serialize, Clone, Debug)]

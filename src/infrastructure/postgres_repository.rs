@@ -207,7 +207,8 @@ impl AllocationRepository for PostgresRepository {
                 INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, created_at, expires_at, idempotency_key, cost_center)
                 VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6, $7, $8)
                 "#
-            )            .bind(lease_id)
+            )
+            .bind(lease_id)
             .bind(resource_id)
             .bind(&owner_id)
             .bind(&tenant_id)
@@ -388,6 +389,122 @@ impl AllocationRepository for PostgresRepository {
             }).collect();
 
             Ok(entries)
+        }
+    }
+
+    fn fulfill_next_waitlist_entry(
+        &self,
+        pool_type: String
+    ) -> impl Future<Output = Result<Option<Lease>, DomainError>> + Send {
+        let db_pool = self.pool.clone();
+        async move {
+            let mut tx = db_pool.begin().await
+                .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            // 1. Find next waitlist entry
+            let waitlist_record = sqlx::query(
+                r#"
+                SELECT id, owner_id, tenant_id
+                FROM waitlist_entries
+                WHERE pool_type = $1
+                ORDER BY priority DESC, created_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+                "#
+            )
+            .bind(&pool_type)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            let (waitlist_id, owner_id, tenant_id) = match waitlist_record {
+                Some(row) => (
+                    row.get::<Uuid, _>("id"),
+                    row.get::<String, _>("owner_id"),
+                    row.get::<String, _>("tenant_id")
+                ),
+                None => return Ok(None),
+            };
+
+            // 2. Find an available resource
+            let resource_record = sqlx::query(
+                r#"
+                SELECT r.id
+                FROM resources r
+                JOIN pools p ON r.pool_id = p.id
+                WHERE p.resource_type = $1 AND r.status = 'Healthy'
+                AND NOT EXISTS (
+                    SELECT 1 FROM leases l
+                    WHERE l.resource_id = r.id AND l.status = 'ACTIVE' AND l.expires_at > NOW()
+                )
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+                "#
+            )
+            .bind(&pool_type)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            let resource_id: Uuid = match resource_record {
+                Some(record) => record.get("id"),
+                None => return Ok(None),
+            };
+
+            // 3. Fulfill: Create Lease & Remove Waitlist Entry
+            let lease_id = Uuid::new_v4();
+            let now = Utc::now();
+            let expires_at = now + chrono::Duration::hours(1); // Default TTL for auto-fulfillment
+
+            sqlx::query(
+                r#"
+                INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, created_at, expires_at)
+                VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6)
+                "#
+            )
+            .bind(lease_id)
+            .bind(resource_id)
+            .bind(&owner_id)
+            .bind(&tenant_id)
+            .bind(now)
+            .bind(expires_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            sqlx::query("DELETE FROM waitlist_entries WHERE id = $1")
+                .bind(waitlist_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            sqlx::query(
+                r#"
+                INSERT INTO audit_log (actor_id, action, resource_id, lease_id, details)
+                VALUES ($1, 'WAITLIST_FULFILL', $2, $3, $4)
+                "#
+            )
+            .bind(&owner_id)
+            .bind(resource_id)
+            .bind(lease_id)
+            .bind(serde_json::json!({ "pool": pool_type, "waitlist_id": waitlist_id }))
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            tx.commit().await.map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            Ok(Some(Lease {
+                id: LeaseId(lease_id),
+                resource_id: ResourceId(resource_id),
+                owner_id,
+                tenant_id,
+                status: LeaseStatus::Active,
+                created_at: now,
+                expires_at,
+                idempotency_key: None,
+                cost_center: None,
+            }))
         }
     }
 }
