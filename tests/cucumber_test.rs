@@ -127,13 +127,13 @@ impl AllocationRepository for MockRepository {
     fn get_summary_stats(&self) -> impl Future<Output=Result<SummaryStats, DomainError>> + Send {
         let leases = self.leases.clone();
         let total = self.total_resources.clone();
-        let healthy = self.available_resources.clone();
         let wait = self.waitlist_count.clone();
         async move {
+            let total_val = *total.lock().unwrap() as i64;
             Ok(SummaryStats {
                 active_leases: leases.lock().unwrap().len() as i64,
-                total_resources: *total.lock().unwrap() as i64,
-                healthy_resources: *healthy.lock().unwrap() as i64,
+                total_resources: total_val,
+                healthy_resources: total_val, // Mock assumes all resources are healthy
                 waitlist_count: *wait.lock().unwrap() as i64,
             })
         }
