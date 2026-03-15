@@ -68,7 +68,7 @@ async fn test_reaper_performance_baseline() {
     println!("Seeding completed in {:?}", start_seed.elapsed());
 
     // 2. Measure Reaper
-    let reaper = ReaperService::new(pool.clone()).with_batch_size(20000);
+    let reaper = ReaperService::new(pool.clone(), std::sync::Arc::new(atropos::infrastructure::postgres_repository::PostgresRepository::new(pool.clone()))).with_batch_size(20000);
     println!("Running Reaper reclamation...");
     
     // Explain the query in a transaction to not affect the actual run

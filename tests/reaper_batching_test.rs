@@ -43,8 +43,9 @@ async fn test_reaper_batching_concurrency() {
     }
 
     // 3. Mock multiple reapers running concurrently with small batch sizes
-    let reaper1 = ReaperService::new(pool.clone()).with_batch_size(10);
-    let reaper2 = ReaperService::new(pool.clone()).with_batch_size(10);
+    let repo = std::sync::Arc::new(atropos::infrastructure::postgres_repository::PostgresRepository::new(pool.clone()));
+    let reaper1 = ReaperService::new(pool.clone(), repo.clone()).with_batch_size(10);
+    let reaper2 = ReaperService::new(pool.clone(), repo.clone()).with_batch_size(10);
 
     // Run reaper 1
     reaper1.reclaim_expired().await;

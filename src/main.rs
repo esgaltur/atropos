@@ -5,25 +5,19 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use tokio::signal;
 
-use atropos::{
-    infrastructure::postgres_repository::PostgresRepository,
-    application::{
-        allocation_service::AllocationService,
-        pool_service::PoolService,
-        resource_service::ResourceService,
-        reaper::ReaperService,
-        maintenance::MaintenanceService,
-    },
-    api::routes::{create_router, AppState},
+use atropos::api::routes::{create_router, AppState};
+use atropos::application::{
+    allocation_service::AllocationService,
+    pool_service::PoolService,
+    resource_service::ResourceService,
+    reaper::ReaperService,
+    maintenance::MaintenanceService,
 };
+use atropos::infrastructure::postgres_repository::PostgresRepository;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenvy::dotenv().ok();
-    
-    // 1. ADVANCED LOGGING & TRACING
-    // Note: OTLP distributed tracing scaffolding is present in Cargo.toml.
-    // Full pipeline initialization requires the new v0.31 builder pattern.
+    // 1. LOGGING & OBSERVABILITY
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
@@ -31,12 +25,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Initializing Atropos [Elite Edition]...");
+    tracing::info!("Atropos Resource Allocator starting up...");
 
-    // 2. METRICS
-    let builder = PrometheusBuilder::new()
-        .with_http_listener(([0, 0, 0, 0], 9000));
-    builder.install().expect("failed to install recorder/exporter");
+    // 2. METRICS (Prometheus)
+    PrometheusBuilder::new()
+        .with_http_listener(([0, 0, 0, 0], 9000))
+        .install()
+        .expect("Failed to install Prometheus recorder");
     tracing::info!("Prometheus metrics available on 0.0.0.0:9000/metrics");
 
     // 3. DATABASE
@@ -47,25 +42,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&database_url)
         .await?;
 
-    // 4. BACKGROUND REAPER with Cancellation
-    let reaper = ReaperService::new(pool.clone());
+    // 4. DEPENDENCY INJECTION (Composition Root)
+    let repo = Arc::new(PostgresRepository::new(pool.clone()));
+    let pool_service = Arc::new(PoolService::new(repo.clone()));
+    let resource_service = Arc::new(ResourceService::new(repo.clone()));
+    let allocation_service = Arc::new(AllocationService::new(repo.clone()));
+
+    // 5. BACKGROUND REAPER with Cancellation
+    let reaper = ReaperService::new(pool.clone(), repo.clone());
     let reaper_handle = tokio::spawn(async move {
         tracing::info!("Starting background Reaper Service...");
         reaper.run().await;
     });
 
-    // 4b. BACKGROUND MAINTENANCE
+    // 5b. BACKGROUND MAINTENANCE
     let maintenance = MaintenanceService::new(pool.clone());
     let maintenance_handle = tokio::spawn(async move {
         tracing::info!("Starting background Maintenance Service...");
         maintenance.run().await;
     });
-
-    // 5. DEPENDENCY INJECTION (Composition Root)
-    let repo = Arc::new(PostgresRepository::new(pool));
-    let pool_service = Arc::new(PoolService::new(repo.clone()));
-    let resource_service = Arc::new(ResourceService::new(repo.clone()));
-    let allocation_service = Arc::new(AllocationService::new(repo.clone()));
 
     let app_state = AppState {
         pool_service,
@@ -97,9 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     tracing::info!("Shutting down. Waiting for background tasks...");
-    reaper_handle.abort(); 
+    reaper_handle.abort();
     maintenance_handle.abort();
-    
+
     Ok(())
 }
 
@@ -126,4 +121,3 @@ async fn shutdown_signal() {
         _ = terminate => { tracing::info!("SIGTERM received, starting graceful shutdown..."); },
     }
 }
-
