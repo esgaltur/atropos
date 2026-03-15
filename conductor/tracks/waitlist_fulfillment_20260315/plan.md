@@ -8,10 +8,10 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Repository Enhancement' (Protocol in workflow.md) (3ecfd90)
 
 ## Phase 2: Reaper Service Integration
-- [ ] Task: Integrate waitlist fulfillment into the `ReaperService` reclamation cycle.
-    - [ ] Write Failing Tests: Update reaper integration tests to verify that reclaimed resources are immediately assigned to waitlisted users.
-    - [ ] Implement Integration: Update `ReaperService` to call fulfillment logic after successful reclamation.
-    - [ ] Verify: Ensure the end-to-end flow works under load.
+- [x] Task: Integrate waitlist fulfillment into the `ReaperService` reclamation cycle. (33b965e)
+    - [x] Write Failing Tests: Update reaper integration tests to verify that reclaimed resources are immediately assigned to waitlisted users.
+    - [x] Implement Integration: Update `ReaperService` to call fulfillment logic after successful reclamation.
+    - [x] Verify: Ensure the end-to-end flow works under load.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Reaper Integration' (Protocol in workflow.md)
 
 ## Phase 3: Manual Release Integration
