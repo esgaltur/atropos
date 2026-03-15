@@ -1,11 +1,11 @@
 # Implementation Plan: waitlist_fulfillment_20260315
 
-## Phase 1: Repository Layer Enhancement
+## Phase 1: Repository Layer Enhancement [checkpoint: 3ecfd90]
 - [x] Task: Implement `fulfill_next_waitlist_entry` in `PostgresRepository`. (76758c4)
     - [x] Write Failing Tests: Create an integration test that seeds a waitlist entry and an available resource, then verifies fulfillment.
     - [x] Implement Feature: Implement atomic waitlist fulfillment logic using `FOR UPDATE SKIP LOCKED`.
     - [x] Verify: Ensure tests pass and audit logs are correctly generated.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Repository Enhancement' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Repository Enhancement' (Protocol in workflow.md) (3ecfd90)
 
 ## Phase 2: Reaper Service Integration
 - [ ] Task: Integrate waitlist fulfillment into the `ReaperService` reclamation cycle.
