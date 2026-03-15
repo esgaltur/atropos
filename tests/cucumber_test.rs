@@ -83,14 +83,14 @@ impl AllocationRepository for MockRepository {
             }
         }
     }
-    fn release_lease(&self, id: &LeaseId) -> impl Future<Output = Result<(), DomainError>> + Send {
+    fn release_lease(&self, id: &LeaseId) -> impl Future<Output = Result<Option<String>, DomainError>> + Send {
         let leases_ref = self.leases.clone();
         let id_str = id.to_string();
         async move {
             let mut map = leases_ref.lock().unwrap();
             if map.contains_key(&id_str) {
                 map.remove(&id_str);
-                Ok(())
+                Ok(None) // For mock, we don't return pool_type for now
             } else {
                 Err(DomainError::LeaseNotFound)
             }

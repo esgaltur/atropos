@@ -251,26 +251,33 @@ impl AllocationRepository for PostgresRepository {
         }
     }
 
-    fn release_lease(&self, lease_id: &LeaseId) -> impl Future<Output = Result<(), DomainError>> + Send {
+    fn release_lease(&self, lease_id: &LeaseId) -> impl Future<Output = Result<Option<String>, DomainError>> + Send {
         let db_pool = self.pool.clone();
         let query_id = lease_id.0;
         async move {
             let mut tx = db_pool.begin().await.map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
-            let res = sqlx::query(
+            
+            // Perform the update and return the pool type
+            let row = sqlx::query(
                 r#"
                 UPDATE leases
                 SET status = 'RELEASED'
-                WHERE id = $1 AND status = 'ACTIVE'
+                FROM resources r, pools p
+                WHERE leases.id = $1 AND leases.status = 'ACTIVE'
+                  AND leases.resource_id = r.id
+                  AND r.pool_id = p.id
+                RETURNING p.resource_type
                 "#
             )
             .bind(query_id)
-            .execute(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            if res.rows_affected() == 0 {
-                return Err(DomainError::LeaseNotFound);
-            }
+            let pool_type: String = match row {
+                Some(r) => r.get("resource_type"),
+                None => return Err(DomainError::LeaseNotFound),
+            };
 
             sqlx::query(
                 r#"
@@ -285,7 +292,7 @@ impl AllocationRepository for PostgresRepository {
 
             tx.commit().await.map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            Ok(())
+            Ok(Some(pool_type))
         }
     }
 

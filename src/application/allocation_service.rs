@@ -85,7 +85,13 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
 
     /// Releases an active lease and returns the resource to the available pool.
     pub async fn release(&self, lease_id: LeaseId) -> Result<(), DomainError> {
-        self.repo.release_lease(&lease_id).await
+        if let Some(pool_type) = self.repo.release_lease(&lease_id).await? {
+            // Automatically fulfill the next waitlist entry for this pool type
+            if let Ok(Some(lease)) = self.repo.fulfill_next_waitlist_entry(pool_type.clone()).await {
+                tracing::info!("Automatically fulfilled waitlist entry after manual release for pool {} (Lease: {})", pool_type, lease.id);
+            }
+        }
+        Ok(())
     }
 
     /// Extends the duration of an active lease by the specified number of seconds.

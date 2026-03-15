@@ -28,7 +28,7 @@ pub trait AllocationRepository: Send + Sync {
         cost_center: Option<String>
     ) -> impl Future<Output = Result<Lease, DomainError>> + Send;
     
-    fn release_lease(&self, lease_id: &LeaseId) -> impl Future<Output = Result<(), DomainError>> + Send;
+    fn release_lease(&self, lease_id: &LeaseId) -> impl Future<Output = Result<Option<String>, DomainError>> + Send;
     
     fn renew_lease(&self, lease_id: &LeaseId, extension_seconds: i64) -> impl Future<Output = Result<(), DomainError>> + Send;
 
