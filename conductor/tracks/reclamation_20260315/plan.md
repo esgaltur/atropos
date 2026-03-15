@@ -9,7 +9,7 @@
 - [x] Task: Implement batching for resource state updates during reclamation. (4eb4912)
 - [x] Task: Add Prometheus counters for successful and failed reclamation attempts. (4eb4912)
 
-## Phase 3: Validation
-- [~] Task: Run high-concurrency stress tests for the reaper.
-- [ ] Task: Verify reclamation performance in the dashboard.
-- [ ] Task: Conductor - User Manual Verification 'Validation' (Protocol in workflow.md)
+## Phase 3: Validation [checkpoint: 78ae8fa]
+- [x] Task: Run high-concurrency stress tests for the reaper. (4eb4912)
+- [x] Task: Verify reclamation performance in the dashboard. (4eb4912)
+- [x] Task: Conductor - User Manual Verification 'Validation' (Protocol in workflow.md) (78ae8fa)

@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [~] **Track: Refine Resource Reclamation for High-Concurrency Clusters**
+- [x] **Track: Refine Resource Reclamation for High-Concurrency Clusters**
   *Link: [./tracks/reclamation_20260315/](./tracks/reclamation_20260315/)*
