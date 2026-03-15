@@ -1,8 +1,0 @@
-{
-  "track_id": "reclamation_20260315",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-03-15T12:05:00Z",
-  "updated_at": "2026-03-15T12:05:00Z",
-  "description": "Refine Resource Reclamation for High-Concurrency Clusters"
-}
