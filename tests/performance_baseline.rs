@@ -68,7 +68,7 @@ async fn test_reaper_performance_baseline() {
     println!("Seeding completed in {:?}", start_seed.elapsed());
 
     // 2. Measure Reaper
-    let reaper = ReaperService::new(pool.clone());
+    let reaper = ReaperService::new(pool.clone()).with_batch_size(20000);
     println!("Running Reaper reclamation...");
     
     // Explain the query in a transaction to not affect the actual run
@@ -89,15 +89,15 @@ async fn test_reaper_performance_baseline() {
     }
 
     let start_reclaim = Instant::now();
-    reaper.reclaim_expired().await;
+    let count = reaper.reclaim_expired().await;
     
     let duration = start_reclaim.elapsed();
     
     // Verify results
-    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM leases WHERE status = 'EXPIRED'")
+    let (expired_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM leases WHERE status = 'EXPIRED'")
         .fetch_one(&pool).await.unwrap();
         
     println!("Reclaimed {} leases in {:?}", count, duration);
     
-    assert!(count >= 10000);
+    assert!(expired_count >= 10000);
 }

@@ -5,48 +5,69 @@ use sqlx::PgPool;
 
 pub struct ReaperService {
     pool: PgPool,
+    batch_size: i64,
 }
 
 impl ReaperService {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-
-    pub async fn run(&self) {
-        // I set this to 10 seconds for testing, but in production we might 
-        // want to make this configurable via environment variables.
-        let mut interval = time::interval(Duration::from_secs(10));
-        loop {
-            interval.tick().await;
-            self.reclaim_expired().await;
+        Self { 
+            pool,
+            batch_size: 1000, // Default batch size
         }
     }
 
-    pub async fn reclaim_expired(&self) {
-        // TODO(esgaltur): Right now this just marks them as EXPIRED. 
-        // I want to add a step that checks the waitlist and immediately 
-        // re-allocates the resource to the next person in line.
+    pub fn with_batch_size(mut self, size: i64) -> Self {
+        self.batch_size = size;
+        self
+    }
+
+    pub async fn run(&self) {
+        let mut interval = time::interval(Duration::from_secs(10));
+        loop {
+            interval.tick().await;
+            loop {
+                let count = self.reclaim_expired().await;
+                if count < self.batch_size {
+                    break;
+                }
+            }
+        }
+    }
+
+    pub async fn reclaim_expired(&self) -> i64 {
+        // Optimized batched reclamation using SKIP LOCKED for high concurrency.
         let res = sqlx::query(
             r#"
+            WITH target_leases AS (
+                SELECT id 
+                FROM leases 
+                WHERE status = 'ACTIVE' AND expires_at <= NOW()
+                LIMIT $1
+                FOR UPDATE SKIP LOCKED
+            )
             UPDATE leases
             SET status = 'EXPIRED'
-            WHERE status = 'ACTIVE' AND expires_at <= NOW()
+            FROM target_leases
+            WHERE leases.id = target_leases.id
             "#
         )
+        .bind(self.batch_size)
         .execute(&self.pool)
         .await;
 
         match res {
             Ok(result) => {
-                let count = result.rows_affected();
+                let count = result.rows_affected() as i64;
                 if count > 0 {
-                    info!("Reaper reclaimed {} expired leases.", count);
-                    // Also emit metrics here if possible
-                    metrics::counter!("reclaim_count").increment(count);
+                    info!("Reaper reclaimed {} expired leases in a batch.", count);
+                    metrics::counter!("reclaim_success_total").increment(count as u64);
                 }
+                count
             }
             Err(e) => {
-                error!("Reaper failed to execute query: {:?}", e);
+                error!("Reaper failed to execute batched reclamation: {:?}", e);
+                metrics::counter!("reclaim_failure_total").increment(1);
+                0
             }
         }
     }
