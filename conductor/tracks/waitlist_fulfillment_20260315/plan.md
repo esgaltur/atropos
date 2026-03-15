@@ -14,9 +14,9 @@
     - [x] Verify: Ensure the end-to-end flow works under load.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Reaper Integration' (Protocol in workflow.md) (476e8ba)
 
-## Phase 3: Manual Release Integration
+## Phase 3: Manual Release Integration [checkpoint: 4a9e3fa]
 - [x] Task: Integrate waitlist fulfillment into the manual release flow. (5185865)
     - [x] Write Failing Tests: Verify that calling `release_lease` automatically fulfills the next waitlist entry.
     - [x] Implement Integration: Update `AllocationService::release` to trigger fulfillment.
     - [x] Verify: Ensure no regressions in manual release performance.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Manual Release Integration' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Manual Release Integration' (Protocol in workflow.md) (4a9e3fa)
