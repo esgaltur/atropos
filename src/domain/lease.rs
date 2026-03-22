@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc, Duration};
+use crate::domain::{LeaseId, LeaseStatus, ResourceId};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use crate::domain::{LeaseId, ResourceId, LeaseStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lease {
@@ -105,7 +105,7 @@ mod tests {
             None,
         );
         lease.status = LeaseStatus::Released;
-        
+
         let check_time = Utc::now() + Duration::seconds(100);
         // Even if the clock is past expires_at, if it's already RELEASED, it shouldn't be "Expired"
         assert!(!lease.is_expired(check_time));

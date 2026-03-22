@@ -1,11 +1,13 @@
-use std::sync::Arc;
-use moka::future::Cache;
-use std::time::Duration;
 use crate::domain::{
-    lease::Lease, LeaseId, pool::Pool,
     error::DomainError,
-    repository::{AllocationRepository, PoolRepository, SummaryStats, AuditLogEntry},
+    lease::Lease,
+    pool::Pool,
+    repository::{AllocationRepository, AuditLogEntry, PoolRepository, SummaryStats},
+    LeaseId,
 };
+use moka::future::Cache;
+use std::sync::Arc;
+use std::time::Duration;
 
 /// The core application service responsible for orchestrating resource allocations and leases.
 ///
@@ -42,43 +44,53 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
     /// - `preempt`: If true, the service may attempt to reclaim resources from lower-priority leases (Experimental).
     #[allow(clippy::too_many_arguments)]
     pub async fn allocate(
-        &self, 
-        pool_type: String, 
-        owner_id: String, 
-        tenant_id: String, 
+        &self,
+        pool_type: String,
+        owner_id: String,
+        tenant_id: String,
         ttl_seconds: i64,
         idempotency_key: Option<String>,
         waitlist: Option<bool>,
-        preempt: Option<bool>
+        preempt: Option<bool>,
     ) -> Result<Lease, DomainError> {
         // 1. Caching Layer Check
         // If we had pool_id we'd cache by ID, for now by type name
-        
-        let result = self.repo.allocate_resource(
-            pool_type.clone(), 
-            owner_id.clone(), 
-            tenant_id.clone(), 
-            ttl_seconds,
-            idempotency_key.clone(),
-            None 
-        ).await;
+
+        let result = self
+            .repo
+            .allocate_resource(
+                pool_type.clone(),
+                owner_id.clone(),
+                tenant_id.clone(),
+                ttl_seconds,
+                idempotency_key.clone(),
+                None,
+            )
+            .await;
 
         match result {
             Err(DomainError::NoResourcesAvailable) if preempt.unwrap_or(false) => {
                 tracing::info!("Pool {} is full. Attempting preemption...", pool_type);
                 // In a real system we'd find the oldest/lowest priority lease here
-                Err(DomainError::InfrastructureError("Preemption required but logic in repo is pending".to_string()))
-            },
+                Err(DomainError::InfrastructureError(
+                    "Preemption required but logic in repo is pending".to_string(),
+                ))
+            }
             Err(DomainError::NoResourcesAvailable) if waitlist.unwrap_or(false) => {
-                tracing::info!("Pool {} is full. Adding {} to waitlist.", pool_type, owner_id);
-                self.repo.waitlist_resource(
-                    pool_type, 
-                    owner_id, 
-                    tenant_id, 
-                    0 // Default priority
-                ).await?;
-                Err(DomainError::InfrastructureError("Added to waitlist".to_string()))
-            },
+                tracing::info!(
+                    "Pool {} is full. Adding {} to waitlist.",
+                    pool_type,
+                    owner_id
+                );
+                self.repo
+                    .waitlist_resource(
+                        pool_type, owner_id, tenant_id, 0, // Default priority
+                    )
+                    .await?;
+                Err(DomainError::InfrastructureError(
+                    "Added to waitlist".to_string(),
+                ))
+            }
             other => other,
         }
     }
@@ -87,7 +99,11 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
     pub async fn release(&self, lease_id: LeaseId) -> Result<(), DomainError> {
         if let Some(pool_type) = self.repo.release_lease(&lease_id).await? {
             // Automatically fulfill the next waitlist entry for this pool type
-            if let Ok(Some(lease)) = self.repo.fulfill_next_waitlist_entry(pool_type.clone()).await {
+            if let Ok(Some(lease)) = self
+                .repo
+                .fulfill_next_waitlist_entry(pool_type.clone())
+                .await
+            {
                 tracing::info!("Automatically fulfilled waitlist entry after manual release for pool {} (Lease: {})", pool_type, lease.id);
             }
         }
@@ -95,7 +111,11 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
     }
 
     /// Extends the duration of an active lease by the specified number of seconds.
-    pub async fn renew(&self, lease_id: LeaseId, extension_seconds: i64) -> Result<(), DomainError> {
+    pub async fn renew(
+        &self,
+        lease_id: LeaseId,
+        extension_seconds: i64,
+    ) -> Result<(), DomainError> {
         self.repo.renew_lease(&lease_id, extension_seconds).await
     }
 

@@ -1,17 +1,19 @@
-use cucumber::{given, when, then, World};
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use std::future::Future;
-use chrono::Utc;
-use uuid::Uuid;
-use atropos::domain::{
-    pool::Pool, resource::Resource, lease::Lease,
-    PoolId, ResourceId, LeaseId,
-    LeaseStatus,
-    error::DomainError, repository::{PoolRepository, ResourceRepository, AllocationRepository}
-};
 use atropos::application::allocation_service::AllocationService;
 use atropos::domain::repository::{AuditLogEntry, SummaryStats};
+use atropos::domain::{
+    error::DomainError,
+    lease::Lease,
+    pool::Pool,
+    repository::{AllocationRepository, PoolRepository, ResourceRepository},
+    resource::Resource,
+    LeaseId, LeaseStatus, PoolId, ResourceId,
+};
+use chrono::Utc;
+use cucumber::{given, then, when, World};
+use std::collections::HashMap;
+use std::future::Future;
+use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 // --- A Robust Mock Repository for Testing ---
 #[derive(Default, Clone, Debug)]
@@ -25,20 +27,42 @@ struct MockRepository {
 }
 
 impl PoolRepository for MockRepository {
-    fn create(&self, _pool: Pool) -> impl Future<Output = Result<(), DomainError>> + Send { async { Ok(()) } }
-    fn find_by_id(&self, _id: &PoolId) -> impl Future<Output = Result<Option<Pool>, DomainError>> + Send { async { Ok(None) } }
+    fn create(&self, _pool: Pool) -> impl Future<Output = Result<(), DomainError>> + Send {
+        async { Ok(()) }
+    }
+    fn find_by_id(
+        &self,
+        _id: &PoolId,
+    ) -> impl Future<Output = Result<Option<Pool>, DomainError>> + Send {
+        async { Ok(None) }
+    }
 }
 impl ResourceRepository for MockRepository {
-    fn create(&self, _res: Resource) -> impl Future<Output = Result<(), DomainError>> + Send { async { Ok(()) } }
-    fn find_by_id(&self, _id: &ResourceId) -> impl Future<Output = Result<Option<Resource>, DomainError>> + Send { async { Ok(None) } }
+    fn create(&self, _res: Resource) -> impl Future<Output = Result<(), DomainError>> + Send {
+        async { Ok(()) }
+    }
+    fn find_by_id(
+        &self,
+        _id: &ResourceId,
+    ) -> impl Future<Output = Result<Option<Resource>, DomainError>> + Send {
+        async { Ok(None) }
+    }
 }
 impl AllocationRepository for MockRepository {
-    fn allocate_resource(&self, _pool: String, owner: String, tenant: String, ttl: i64, key: Option<String>, _cost: Option<String>) -> impl Future<Output = Result<Lease, DomainError>> + Send {
+    fn allocate_resource(
+        &self,
+        _pool: String,
+        owner: String,
+        tenant: String,
+        ttl: i64,
+        key: Option<String>,
+        _cost: Option<String>,
+    ) -> impl Future<Output = Result<Lease, DomainError>> + Send {
         let available_ref = self.available_resources.clone();
         let leases_ref = self.leases.clone();
         let idem_ref = self.idempotency_map.clone();
         let audit_ref = self.audit_logs.clone();
-        
+
         async move {
             // Check Idempotency
             if let Some(ref k) = key {
@@ -62,8 +86,11 @@ impl AllocationRepository for MockRepository {
                     idempotency_key: key.clone(),
                     cost_center: None,
                 };
-                
-                leases_ref.lock().unwrap().insert(lease.id.to_string(), lease.clone());
+
+                leases_ref
+                    .lock()
+                    .unwrap()
+                    .insert(lease.id.to_string(), lease.clone());
                 if let Some(k) = key {
                     idem_ref.lock().unwrap().insert(k, lease.clone());
                 }
@@ -83,7 +110,10 @@ impl AllocationRepository for MockRepository {
             }
         }
     }
-    fn release_lease(&self, id: &LeaseId) -> impl Future<Output = Result<Option<String>, DomainError>> + Send {
+    fn release_lease(
+        &self,
+        id: &LeaseId,
+    ) -> impl Future<Output = Result<Option<String>, DomainError>> + Send {
         let leases_ref = self.leases.clone();
         let id_str = id.to_string();
         async move {
@@ -96,7 +126,11 @@ impl AllocationRepository for MockRepository {
             }
         }
     }
-    fn renew_lease(&self, id: &LeaseId, _sec: i64) -> impl Future<Output = Result<(), DomainError>> + Send {
+    fn renew_lease(
+        &self,
+        id: &LeaseId,
+        _sec: i64,
+    ) -> impl Future<Output = Result<(), DomainError>> + Send {
         let leases_ref = self.leases.clone();
         let id_str = id.to_string();
         async move {
@@ -114,7 +148,7 @@ impl AllocationRepository for MockRepository {
         _pool_type: String,
         _owner_id: String,
         _tenant_id: String,
-        _priority: i32
+        _priority: i32,
     ) -> impl Future<Output = Result<(), DomainError>> + Send {
         let wait_ref = self.waitlist_count.clone();
         async move {
@@ -124,7 +158,7 @@ impl AllocationRepository for MockRepository {
         }
     }
 
-    fn get_summary_stats(&self) -> impl Future<Output=Result<SummaryStats, DomainError>> + Send {
+    fn get_summary_stats(&self) -> impl Future<Output = Result<SummaryStats, DomainError>> + Send {
         let leases = self.leases.clone();
         let total = self.total_resources.clone();
         let wait = self.waitlist_count.clone();
@@ -139,7 +173,10 @@ impl AllocationRepository for MockRepository {
         }
     }
 
-    fn get_recent_audit_logs(&self, limit: i64) -> impl Future<Output=Result<Vec<AuditLogEntry>, DomainError>> + Send {
+    fn get_recent_audit_logs(
+        &self,
+        limit: i64,
+    ) -> impl Future<Output = Result<Vec<AuditLogEntry>, DomainError>> + Send {
         let logs = self.audit_logs.clone();
         async move {
             let logs = logs.lock().unwrap();
@@ -150,7 +187,7 @@ impl AllocationRepository for MockRepository {
 
     fn fulfill_next_waitlist_entry(
         &self,
-        _pool_type: String
+        _pool_type: String,
     ) -> impl Future<Output = Result<Option<Lease>, DomainError>> + Send {
         async { Ok(None) }
     }
@@ -180,7 +217,9 @@ fn set_available(world: &mut AtroposWorld, count: i32, _status: String) {
 #[when(expr = "a team {string} requests 1 GPU")]
 async fn request_gpu(world: &mut AtroposWorld, team: String) {
     let service = AllocationService::new(Arc::new(world.repo.clone()));
-    let res = service.allocate("GPU".into(), "user-01".into(), team, 60, None, None, None).await;
+    let res = service
+        .allocate("GPU".into(), "user-01".into(), team, 60, None, None, None)
+        .await;
     world.last_results.push(res);
 }
 
@@ -192,7 +231,17 @@ async fn team_allocates_gpu(world: &mut AtroposWorld, team: String) {
 #[when(expr = "a team {string} requests a GPU with idempotency key {string}")]
 async fn request_gpu_idem(world: &mut AtroposWorld, team: String, key: String) {
     let service = AllocationService::new(Arc::new(world.repo.clone()));
-    let res = service.allocate("GPU".into(), "user-01".into(), team, 60, Some(key), None, None).await;
+    let res = service
+        .allocate(
+            "GPU".into(),
+            "user-01".into(),
+            team,
+            60,
+            Some(key),
+            None,
+            None,
+        )
+        .await;
     world.last_results.push(res);
 }
 
@@ -204,7 +253,17 @@ async fn request_gpu_idem_same(world: &mut AtroposWorld, team: String, key: Stri
 #[when(expr = "a team {string} requests a GPU with waitlist enabled")]
 async fn request_gpu_waitlist(world: &mut AtroposWorld, team: String) {
     let service = AllocationService::new(Arc::new(world.repo.clone()));
-    let res = service.allocate("GPU".into(), "user-01".into(), team, 60, None, Some(true), None).await;
+    let res = service
+        .allocate(
+            "GPU".into(),
+            "user-01".into(),
+            team,
+            60,
+            None,
+            Some(true),
+            None,
+        )
+        .await;
     world.last_results.push(res);
 }
 
@@ -227,14 +286,16 @@ fn check_lease(world: &mut AtroposWorld) {
 fn check_reason(world: &mut AtroposWorld, reason: String) {
     if let Some(res) = world.last_results.last() {
         if let Err(err) = res {
-             if err.to_string() == reason { return; }
+            if err.to_string() == reason {
+                return;
+            }
         }
     }
-    
+
     if let Some(res) = &world.last_op_result {
         if let Err(err) = res {
-             assert_eq!(err.to_string(), reason);
-             return;
+            assert_eq!(err.to_string(), reason);
+            return;
         }
     }
     panic!("No error found matching reason: {}", reason);
@@ -242,7 +303,12 @@ fn check_reason(world: &mut AtroposWorld, reason: String) {
 
 #[then(expr = "both responses should contain the {string} Lease ID")]
 fn check_idem(world: &mut AtroposWorld, match_type: String) {
-    let l1 = world.last_results.get(world.last_results.len() - 2).unwrap().as_ref().unwrap();
+    let l1 = world
+        .last_results
+        .get(world.last_results.len() - 2)
+        .unwrap()
+        .as_ref()
+        .unwrap();
     let l2 = world.last_results.last().unwrap().as_ref().unwrap();
     if match_type == "Same" {
         assert_eq!(l1.id, l2.id);
@@ -329,17 +395,26 @@ async fn admin_requests_stats(world: &mut AtroposWorld) {
 
 #[then(expr = "the active lease count should be {int}")]
 fn check_active_leases(world: &mut AtroposWorld, expected: i32) {
-    assert_eq!(world.last_stats.as_ref().unwrap().active_leases, expected as i64);
+    assert_eq!(
+        world.last_stats.as_ref().unwrap().active_leases,
+        expected as i64
+    );
 }
 
 #[then(expr = "the total healthy resource count should be {int}")]
 fn check_healthy_resources(world: &mut AtroposWorld, expected: i32) {
-    assert_eq!(world.last_stats.as_ref().unwrap().healthy_resources, expected as i64);
+    assert_eq!(
+        world.last_stats.as_ref().unwrap().healthy_resources,
+        expected as i64
+    );
 }
 
 #[then(expr = "the waitlist count should be {int}")]
 fn check_waitlist_count(world: &mut AtroposWorld, expected: i32) {
-    assert_eq!(world.last_stats.as_ref().unwrap().waitlist_count, expected as i64);
+    assert_eq!(
+        world.last_stats.as_ref().unwrap().waitlist_count,
+        expected as i64
+    );
 }
 
 #[when(expr = "the administrator requests recent audit logs")]
@@ -350,7 +425,10 @@ async fn admin_requests_logs(world: &mut AtroposWorld) {
 
 #[then(expr = "the latest audit log should show {string}")]
 fn check_latest_log_action(world: &mut AtroposWorld, action: String) {
-    assert_eq!(world.last_logs.last().unwrap().action.as_deref(), Some(action.as_str()));
+    assert_eq!(
+        world.last_logs.last().unwrap().action.as_deref(),
+        Some(action.as_str())
+    );
 }
 
 #[then(expr = "the logs should contain at least {int} entry")]

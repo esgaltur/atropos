@@ -1,5 +1,5 @@
 ```markdown
-# Resource Leasing & Capacity Orchestration Platform — Requirements
+# Resource Leasing & Capacity Orchestration Platform ï¿½ Requirements
 
 **Version:** 2.0  
 **Status:** Draft  
@@ -98,7 +98,7 @@ A Lease must transition through explicit states:
 | ID | Requirement |
 | :--- | :--- |
 | **FR-11** | **TTL Enforcement:** Every lease requires `created_at` + `ttl_seconds`. |
-| **FR-12** | **Renewal:** `PATCH /leases/{id}` extends `expires_at`. Must validate against Max TTL policy. |
+| **FR-12** | **Renewal:** `POST /leases/{id}/renew` extends `expires_at`. Must validate against Max TTL policy. |
 | **FR-13** | **Reaper Service:** Background worker shall scan for `EXPIRED` leases every `N` seconds (configurable, e.g., 10s) and force transition to `RELEASED`. |
 | **FR-14** | **Cooldown:** Released resources shall enter a `COOLDOWN` state (configurable duration) before becoming `Healthy` again to prevent flapping. |
 
@@ -262,7 +262,7 @@ paths:
           in: query
 
   /leases/{lease_id}/renew:
-    patch:
+    post:
       summary: Renew a Lease
       requestBody:
         content:
@@ -369,7 +369,7 @@ For Allocation, use a transaction with `SELECT ... FOR UPDATE SKIP LOCKED` on th
 
 ### Milestone 2: Lifecycle & Safety (Weeks 5-8)
 - [ ] **Reaper:** Build background worker to scan `expires_at` and update status.
-- [ ] **Renewal:** Implement `PATCH /leases/{id}/renew`.
+- [ ] **Renewal:** Implement `POST /leases/{id}/renew`.
 - [ ] **Auth:** Integrate JWT Middleware and RBAC checks.
 - [ ] **Audit:** Implement database triggers or app-side logging to `audit_log`.
 - [ ] **Metrics:** Expose Prometheus endpoints for lease counts and latency.

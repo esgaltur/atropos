@@ -1,7 +1,7 @@
+use crate::domain::{PoolId, ResourceId, ResourceStatus};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::domain::{ResourceId, PoolId, ResourceStatus};
 
 /// An individual resource instance that can be leased by users or automated systems.
 #[derive(Debug, Clone, Serialize, Deserialize)]

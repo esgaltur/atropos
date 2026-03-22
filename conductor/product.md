@@ -25,7 +25,7 @@ Atropos is a high-performance resource orchestration platform that provides stri
 - **Hexagonal Architecture:** Strict separation between domain logic and infrastructure.
 - **Type-Safe Domain:** Newtype patterns for all entity IDs (`PoolId`, `ResourceId`, `LeaseId`).
 - **High Concurrency Support:** Built with Rust, Tokio, and SQLx for scale.
-- **Interactive Dashboard:** Lightweight HTMX + Askama for resource monitoring.
+- **Interactive Dashboard:** Leptos SSR dashboard with HTMX refreshes for resource monitoring.
 
 ## Success Metrics
 - **Zero Double-Bookings:** 100% consistency in resource allocation.

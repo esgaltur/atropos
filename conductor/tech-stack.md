@@ -6,7 +6,7 @@
 
 ## API & Web
 - **Axum:** Ergonomic and modular web framework built on top of `tokio` and `tower`.
-- **HTMX + Askama:** Lightweight, server-side rendered dashboard components for real-time monitoring without heavy JavaScript.
+- **Leptos SSR + HTMX:** Shared-contract, server-side rendered dashboard components for real-time monitoring without a separate SPA runtime.
 
 ## Database & Persistence
 - **PostgreSQL:** Reliable relational database for consistent resource state management.

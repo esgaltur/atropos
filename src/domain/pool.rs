@@ -1,6 +1,6 @@
+use crate::domain::{AllocationPolicy, PoolId};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::domain::{PoolId, AllocationPolicy};
 
 /// Represents a collection of similar resources managed under a specific allocation policy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct Pool {
 }
 
 impl Pool {
-    // TODO(esgaltur): I'm thinking about adding a `max_capacity` field here 
+    // TODO(esgaltur): I'm thinking about adding a `max_capacity` field here
     // to limit how many resources can be added to a pool.
     /// Creates a new resource pool with a unique ID and current timestamp.
     pub fn new(name: String, resource_type: String, policy: AllocationPolicy) -> Self {

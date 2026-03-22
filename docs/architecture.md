@@ -27,8 +27,8 @@ The implementation of the outward-facing Ports.
 ### 4. API Layer (`src/api/`)
 The delivery mechanism.
 *   **Axum:** We use Axum for high-throughput async HTTP routing.
-*   **Handlers:** These are intentionally "anemic". They only handle HTTP semantics (deserializing JSON payloads, matching `DomainError` to the correct HTTP status code like `409 Conflict`, and serializing the response).
-*   **UI:** Contains the Askama/HTMX rendered Admin dashboard.
+*   **Handlers:** These are intentionally "anemic". They handle HTTP semantics, convert domain objects to shared contract DTOs, and map `DomainError` to the correct HTTP status codes.
+*   **UI:** The admin dashboard is server-side rendered through Leptos SSR in the dedicated `frontend/` crate, with Axum serving the resulting HTML.
 
 ## Concurrency Model
 The platform is designed to handle "Thundering Herd" scenarios where hundreds of clients simultaneously request a single available resource.

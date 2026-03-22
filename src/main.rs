@@ -1,17 +1,14 @@
-use std::sync::Arc;
-use sqlx::postgres::PgPoolOptions;
-use tokio::net::TcpListener;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use metrics_exporter_prometheus::PrometheusBuilder;
+use sqlx::postgres::PgPoolOptions;
+use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::signal;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use atropos::api::routes::{create_router, AppState};
 use atropos::application::{
-    allocation_service::AllocationService,
-    pool_service::PoolService,
-    resource_service::ResourceService,
-    reaper::ReaperService,
-    maintenance::MaintenanceService,
+    allocation_service::AllocationService, maintenance::MaintenanceService,
+    pool_service::PoolService, reaper::ReaperService, resource_service::ResourceService,
 };
 use atropos::infrastructure::postgres_repository::PostgresRepository;
 
@@ -76,15 +73,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("gRPC Listening on {}", grpc_addr);
 
     let grpc_server = tonic::transport::Server::builder()
-        .add_service(atropos::api::grpc::atropos_v1::allocation_service_server::AllocationServiceServer::new(grpc_service))
+        .add_service(
+            atropos::api::grpc::atropos_v1::allocation_service_server::AllocationServiceServer::new(
+                grpc_service,
+            ),
+        )
         .serve(grpc_addr);
 
     // 7. GRACEFUL SHUTDOWN & DUAL SERVER RUN
     let listener = TcpListener::bind("0.0.0.0:3000").await?;
     tracing::info!("API Listening on {}", listener.local_addr()?);
-    
-    let axum_server = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal());
+
+    let axum_server = axum::serve(listener, app).with_graceful_shutdown(shutdown_signal());
 
     tokio::select! {
         _ = axum_server => { tracing::info!("Axum server exited"); },

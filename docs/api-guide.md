@@ -59,7 +59,7 @@ curl -X POST http://localhost:3000/leases
 ### Renew a Lease
 Extend an active lease by 1800 seconds (30 minutes).
 ```bash
-curl -X PATCH http://localhost:3000/leases/<LEASE_ID>/renew 
+curl -X POST http://localhost:3000/leases/<LEASE_ID>/renew 
   -H "Content-Type: application/json" 
   -d '{
     "extension_seconds": 1800

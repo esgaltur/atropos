@@ -1,16 +1,20 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::fmt;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PoolId(pub Uuid);
 
 impl PoolId {
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for PoolId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl fmt::Display for PoolId {
@@ -23,11 +27,15 @@ impl fmt::Display for PoolId {
 pub struct ResourceId(pub Uuid);
 
 impl ResourceId {
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for ResourceId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl fmt::Display for ResourceId {
@@ -40,11 +48,15 @@ impl fmt::Display for ResourceId {
 pub struct LeaseId(pub Uuid);
 
 impl LeaseId {
-    pub fn new() -> Self { Self(Uuid::new_v4()) }
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
 }
 
 impl Default for LeaseId {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl fmt::Display for LeaseId {
@@ -53,14 +65,18 @@ impl fmt::Display for LeaseId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+)]
 pub enum AllocationPolicy {
     FIFO,
     LRU,
     Random,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+)]
 pub enum ResourceStatus {
     Healthy,
     Unhealthy,
@@ -69,7 +85,9 @@ pub enum ResourceStatus {
     Cooldown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+)]
 pub enum LeaseStatus {
     Pending,
     Active,
@@ -80,9 +98,8 @@ pub enum LeaseStatus {
     Waiting,
 }
 
-pub mod pool;
-pub mod resource;
-pub mod lease;
 pub mod error;
+pub mod lease;
+pub mod pool;
 pub mod repository;
-
+pub mod resource;

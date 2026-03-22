@@ -1,9 +1,9 @@
-use tonic::{Request, Response, Status};
-use std::sync::Arc;
 use crate::api::grpc::atropos_v1::allocation_service_server::AllocationService;
 use crate::api::grpc::atropos_v1::{AllocateRequest, AllocateResponse};
 use crate::application::allocation_service::AllocationService as AppService;
 use crate::domain::repository::{AllocationRepository, PoolRepository};
+use std::sync::Arc;
+use tonic::{Request, Response, Status};
 
 // Import the generated code
 pub mod atropos_v1 {
@@ -21,22 +21,27 @@ impl<R: AllocationRepository + PoolRepository> GrpcAllocationService<R> {
 }
 
 #[tonic::async_trait]
-impl<R: AllocationRepository + PoolRepository + 'static> AllocationService for GrpcAllocationService<R> {
+impl<R: AllocationRepository + PoolRepository + 'static> AllocationService
+    for GrpcAllocationService<R>
+{
     async fn allocate(
         &self,
         request: Request<AllocateRequest>,
     ) -> Result<Response<AllocateResponse>, Status> {
         let req = request.into_inner();
-        
-        let result = self.app_service.allocate(
-            req.pool_type,
-            req.owner_id,
-            req.tenant_id,
-            req.ttl_seconds,
-            req.idempotency_key,
-            Some(req.waitlist),
-            Some(req.preempt),
-        ).await;
+
+        let result = self
+            .app_service
+            .allocate(
+                req.pool_type,
+                req.owner_id,
+                req.tenant_id,
+                req.ttl_seconds,
+                req.idempotency_key,
+                Some(req.waitlist),
+                Some(req.preempt),
+            )
+            .await;
 
         match result {
             Ok(lease) => Ok(Response::new(AllocateResponse {

@@ -1,7 +1,7 @@
+use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time;
-use tracing::{info, error};
-use sqlx::PgPool;
+use tracing::{error, info};
 
 pub struct MaintenanceService {
     pool: PgPool,
@@ -30,7 +30,7 @@ impl MaintenanceService {
             DELETE FROM leases 
             WHERE status IN ('RELEASED', 'EXPIRED', 'REVOKED') 
             AND expires_at < NOW() - INTERVAL '30 days'
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await;
@@ -45,16 +45,19 @@ impl MaintenanceService {
             r#"
             DELETE FROM audit_log 
             WHERE created_at < NOW() - INTERVAL '90 days'
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await;
 
         match prune_audit {
-            Ok(res) => info!("Maintenance: Pruned {} old audit logs.", res.rows_affected()),
+            Ok(res) => info!(
+                "Maintenance: Pruned {} old audit logs.",
+                res.rows_affected()
+            ),
             Err(e) => error!("Maintenance failed to prune audit logs: {}", e),
         }
-        
+
         // 3. Optional: VACUUM (Requires Postgres superuser or table owner permissions)
         // Note: Postgres autovacuum usually handles this, but we can trigger it for extreme loads
         // sqlx::query("VACUUM (ANALYZE) leases").execute(&self.pool).await.ok();

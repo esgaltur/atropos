@@ -1,9 +1,9 @@
-use std::time::Duration;
-use tokio::time;
-use tracing::{info, error};
-use std::sync::Arc;
 use crate::domain::repository::AllocationRepository;
 use sqlx::{PgPool, Row};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time;
+use tracing::{error, info};
 
 pub struct ReaperService<R: AllocationRepository> {
     pool: PgPool, // Keep pool for the specific reaper queries
@@ -13,7 +13,7 @@ pub struct ReaperService<R: AllocationRepository> {
 
 impl<R: AllocationRepository> ReaperService<R> {
     pub fn new(pool: PgPool, repo: Arc<R>) -> Self {
-        Self { 
+        Self {
             pool,
             repo,
             batch_size: 1000, // Default batch size
@@ -57,7 +57,7 @@ impl<R: AllocationRepository> ReaperService<R> {
               AND leases.resource_id = r.id
               AND r.pool_id = p.id
             RETURNING p.resource_type
-            "#
+            "#,
         )
         .bind(self.batch_size)
         .fetch_all(&self.pool)
@@ -71,15 +71,23 @@ impl<R: AllocationRepository> ReaperService<R> {
                     metrics::counter!("reclaim_success_total").increment(count as u64);
 
                     // Collect unique pool types to fulfill waitlist
-                    let mut pool_types: std::collections::HashSet<String> = rows.iter()
+                    let mut pool_types: std::collections::HashSet<String> = rows
+                        .iter()
                         .map(|r| r.get::<String, _>("resource_type"))
                         .collect();
 
                     for pool_type in pool_types.drain() {
                         // Fulfill as many waitlist entries as possible for this type
                         // (until no more entries or no more resources)
-                        while let Ok(Some(lease)) = self.repo.fulfill_next_waitlist_entry(pool_type.clone()).await {
-                            info!("Automatically fulfilled waitlist entry for pool {} (Lease: {})", pool_type, lease.id);
+                        while let Ok(Some(lease)) = self
+                            .repo
+                            .fulfill_next_waitlist_entry(pool_type.clone())
+                            .await
+                        {
+                            info!(
+                                "Automatically fulfilled waitlist entry for pool {} (Lease: {})",
+                                pool_type, lease.id
+                            );
                         }
                     }
                 }

@@ -1,11 +1,8 @@
-use std::sync::Arc;
-use serde_json::Value;
 use crate::domain::{
-    resource::Resource,
-    error::DomainError,
-    repository::ResourceRepository,
-    PoolId,
+    error::DomainError, repository::ResourceRepository, resource::Resource, PoolId,
 };
+use serde_json::Value;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct ResourceService<R: ResourceRepository> {
@@ -17,7 +14,12 @@ impl<R: ResourceRepository> ResourceService<R> {
         Self { repo }
     }
 
-    pub async fn register_resource(&self, pool_id: PoolId, external_id: String, attributes: Value) -> Result<Resource, DomainError> {
+    pub async fn register_resource(
+        &self,
+        pool_id: PoolId,
+        external_id: String,
+        attributes: Value,
+    ) -> Result<Resource, DomainError> {
         let resource = Resource::new(pool_id, external_id, attributes);
         self.repo.create(resource.clone()).await?;
         Ok(resource)
