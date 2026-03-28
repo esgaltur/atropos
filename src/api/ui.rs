@@ -2,11 +2,14 @@ use crate::api::routes::{AppRepository, AppState};
 use atropos_contracts::{AuditLogItem, DashboardStats};
 use atropos_frontend::{render_audit_log, render_dashboard};
 use axum::{
-    body::to_bytes,
     extract::State,
     http::StatusCode,
     response::{Html, IntoResponse},
 };
+
+const RECENT_LOG_LIMIT: i64 = 15;
+const DEFAULT_ACTION: &str = "OP";
+const DEFAULT_ACTOR: &str = "-";
 
 fn map_stats(stats: crate::domain::repository::SummaryStats) -> DashboardStats {
     DashboardStats {
@@ -20,33 +23,38 @@ fn map_stats(stats: crate::domain::repository::SummaryStats) -> DashboardStats {
 fn map_log(log: crate::domain::repository::AuditLogEntry) -> AuditLogItem {
     AuditLogItem {
         created_at: log.created_at.format("%H:%M:%S").to_string(),
-        action: log.action.unwrap_or_else(|| "OP".to_string()),
-        actor_id: log.actor_id.unwrap_or_else(|| "-".to_string()),
+        action: log.action.unwrap_or_else(|| DEFAULT_ACTION.to_string()),
+        actor_id: log.actor_id.unwrap_or_else(|| DEFAULT_ACTOR.to_string()),
         id: log.id,
     }
+}
+
+async fn fetch_stats_or_default<R: AppRepository>(
+    state: &AppState<R>,
+) -> crate::domain::repository::SummaryStats {
+    state
+        .allocation_service
+        .get_stats()
+        .await
+        .unwrap_or_default()
+}
+
+async fn fetch_recent_logs<R: AppRepository>(state: &AppState<R>) -> Vec<AuditLogItem> {
+    state
+        .allocation_service
+        .get_recent_logs(RECENT_LOG_LIMIT)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(map_log)
+        .collect::<Vec<_>>()
 }
 
 pub async fn admin_dashboard(
     State(state): State<AppState<impl AppRepository>>,
 ) -> impl IntoResponse {
-    let stats = match state.allocation_service.get_stats().await {
-        Ok(s) => s,
-        Err(_) => crate::domain::repository::SummaryStats {
-            active_leases: 0,
-            total_resources: 0,
-            waitlist_count: 0,
-            healthy_resources: 0,
-        },
-    };
-
-    let logs = state
-        .allocation_service
-        .get_recent_logs(15)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(map_log)
-        .collect::<Vec<_>>();
+    let stats = fetch_stats_or_default(&state).await;
+    let logs = fetch_recent_logs(&state).await;
 
     Html(render_dashboard(map_stats(stats), logs)).into_response()
 }
@@ -54,14 +62,7 @@ pub async fn admin_dashboard(
 pub async fn audit_log_stream(
     State(state): State<AppState<impl AppRepository>>,
 ) -> impl IntoResponse {
-    let logs = state
-        .allocation_service
-        .get_recent_logs(15)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(map_log)
-        .collect::<Vec<_>>();
+    let logs = fetch_recent_logs(&state).await;
 
     let html = render_audit_log(logs);
     if html.is_empty() {
@@ -90,11 +91,9 @@ mod tests {
             LeaseId, PoolId, ResourceId,
         },
     };
+    use axum::body::to_bytes;
     use chrono::Utc;
-    use std::{
-        future::{ready, Ready},
-        sync::Arc,
-    };
+    use std::{future::ready, sync::Arc};
 
     struct FakeRepository {
         stats: Option<SummaryStats>,

@@ -66,7 +66,7 @@ pub trait AllocationRepository: Send + Sync {
     ) -> impl Future<Output = Result<Option<Lease>, DomainError>> + Send;
 }
 
-#[derive(serde::Serialize, Clone, Debug)]
+#[derive(serde::Serialize, Clone, Debug, Default)]
 pub struct SummaryStats {
     pub active_leases: i64,
     pub total_resources: i64,
