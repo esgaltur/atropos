@@ -11,7 +11,7 @@ use crate::domain::{
         AllocationRepository, AuditLogEntry, PoolRepository, ResourceRepository, SummaryStats,
     },
     resource::Resource,
-    LeaseId, LeaseStatus, PoolId, ResourceId, ResourceStatus,
+    LeaseId, LeaseStatus, PoolId, ResourceId,
 };
 
 pub struct PostgresRepository {

@@ -49,8 +49,8 @@ The entry point. Implements the REST contract using **Axum**. It handles HTTP-sp
 
 For deep technical insights, Architecture Decision Records (ADRs), and operational runbooks, please explore our comprehensive documentation suite:
 
-*   [System Architecture & Design](docs/architecture.md)
-*   [Deployment & Scaling Guide](docs/deployment.md)
+*   [System Architecture & Design](docs/project/architecture.md)
+*   [Deployment & Scaling Guide](docs/project/deployment.md)
 *   [ADR 0001: Why we use Postgres SKIP LOCKED](docs/adr/0001-postgres-skip-locked.md)
 *   [ADR 0002: Hexagonal Architecture](docs/adr/0002-hexagonal-architecture.md)
 *   [ADR 0003: The Background Reaper](docs/adr/0003-reaper-service.md)

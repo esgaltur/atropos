@@ -4,7 +4,7 @@
 This project is compiled as a static, optimized binary. It is designed to be deployed as a containerized microservice.
 
 ### Docker Multi-Stage Build
-The provided `Dockerfile` uses a two-stage approach:
+The provided `infra/Dockerfile` uses a two-stage approach:
 1.  **Builder (`rust:1.75-slim-bookworm`):** Compiles the heavy dependency tree.
 2.  **Runtime (`debian:bookworm-slim`):** Copies *only* the compiled binary and necessary SSL certificates.
 

@@ -13,7 +13,6 @@ use cucumber::{given, then, when, World};
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 
 // --- A Robust Mock Repository for Testing ---
 #[derive(Default, Clone, Debug)]
@@ -57,6 +56,7 @@ impl AllocationRepository for MockRepository {
         priority: i32,
         ttl: i64,
         _constraints: Option<serde_json::Value>,
+        _spread_by: Option<String>,
         key: Option<String>,
         _cost: Option<String>,
     ) -> impl Future<Output = Result<Lease, DomainError>> + Send {
@@ -228,7 +228,18 @@ fn set_available(world: &mut AtroposWorld, count: i32, _status: String) {
 async fn request_gpu(world: &mut AtroposWorld, team: String) {
     let service = AllocationService::new(Arc::new(world.repo.clone()));
     let res = service
-        .allocate("GPU".into(), "user-01".into(), team, 0, 60, None, None, None, None, None)
+        .allocate(
+            "GPU".into(),
+            "user-01".into(),
+            team,
+            0,
+            60,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await;
     world.last_results.push(res);
 }
@@ -263,6 +274,26 @@ async fn request_gpu_idem_same(world: &mut AtroposWorld, team: String, key: Stri
     request_gpu_idem(world, team, key).await;
 }
 
+#[when(expr = "a team {string} requests a GPU with preempt enabled")]
+async fn request_gpu_preempt(world: &mut AtroposWorld, team: String) {
+    let service = AllocationService::new(Arc::new(world.repo.clone()));
+    let res = service
+        .allocate(
+            "GPU".into(),
+            "user-01".into(),
+            team,
+            0,
+            60,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+        )
+        .await;
+    world.last_results.push(res);
+}
+
 #[when(expr = "a team {string} requests a GPU with waitlist enabled")]
 async fn request_gpu_waitlist(world: &mut AtroposWorld, team: String) {
     let service = AllocationService::new(Arc::new(world.repo.clone()));
@@ -273,6 +304,7 @@ async fn request_gpu_waitlist(world: &mut AtroposWorld, team: String) {
             team,
             0,
             60,
+            None,
             None,
             None,
             Some(true),
@@ -389,6 +421,7 @@ fn check_op_result(world: &mut AtroposWorld, expected: String) {
 }
 
 // --- Observability Steps ---
+#[given(expr = "the resource pool {string} exists with {int} healthy resource")]
 #[given(expr = "the resource pool {string} exists with {int} healthy resources")]
 fn pool_exists_with_resources(world: &mut AtroposWorld, _name: String, count: i32) {
     *world.repo.available_resources.lock().unwrap() = count;
@@ -462,8 +495,5 @@ mod tests {
         AtroposWorld::run("tests/features/allocation.feature").await;
         AtroposWorld::run("tests/features/lifecycle.feature").await;
         AtroposWorld::run("tests/features/observability.feature").await;
-    }
-}
-lity.feature").await;
     }
 }

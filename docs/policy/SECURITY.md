@@ -41,7 +41,7 @@ Security advisories will be published via GitHub Security Advisories once a fix 
 - The official Docker image.
 
 ### Out of Scope
-- Demo scripts (`demo.ps1`, `verify_full.ps1`).
-- Load testing scripts (`load_test.js`).
+- Demo scripts (`scripts/demo.ps1`, `scripts/verify_full.ps1`).
+- Load testing scripts (`scripts/load_test.js`).
 - Third-party dependencies (please report these to their respective upstream maintainers).
-- Local development environment configurations (e.g., `docker-compose.yml` for local dev).
+- Local development environment configurations (e.g., `infra/docker-compose.yml` for local dev).

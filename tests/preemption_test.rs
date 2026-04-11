@@ -1,7 +1,5 @@
 use atropos::application::allocation_service::AllocationService;
-use atropos::domain::LeaseStatus;
 use atropos::infrastructure::postgres_repository::PostgresRepository;
-use chrono::{Duration, Utc};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use uuid::Uuid;

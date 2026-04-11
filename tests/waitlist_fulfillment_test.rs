@@ -1,6 +1,5 @@
 use atropos::domain::{repository::AllocationRepository, LeaseStatus};
 use atropos::infrastructure::postgres_repository::PostgresRepository;
-use chrono::{Duration, Utc};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 

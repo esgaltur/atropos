@@ -1,25 +1,23 @@
 use crate::domain::{
     error::DomainError,
     lease::Lease,
-    pool::Pool,
     repository::{AllocationRepository, AuditLogEntry, PoolRepository, SummaryStats},
     LeaseId,
 };
 use moka::future::Cache;
 use std::sync::Arc;
-use uuid::Uuid;
 
 pub struct AllocationService<R: AllocationRepository + PoolRepository> {
     repo: Arc<R>,
     // Optional caching layer for fast capacity checks
-    cache: Cache<String, i64>,
+    _cache: Cache<String, i64>,
 }
 
 impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
     pub fn new(repo: Arc<R>) -> Self {
         Self {
             repo,
-            cache: Cache::new(1000),
+            _cache: Cache::new(1000),
         }
     }
 
@@ -82,6 +80,11 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
                     .await?;
                 Err(DomainError::InfrastructureError(
                     "Added to waitlist".to_string(),
+                ))
+            }
+            Err(DomainError::NoResourcesAvailable) if preempt.unwrap_or(false) => {
+                Err(DomainError::InfrastructureError(
+                    "Preemption required but logic in repo is pending".to_string(),
                 ))
             }
             other => other,

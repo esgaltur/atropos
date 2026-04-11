@@ -518,14 +518,14 @@ Closes #(issue number)
 Add the following after the existing "Code of Conduct" section (line 6):
 
 ```markdown
-Please read it carefully: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Please read it carefully: [CODE_OF_CONDUCT.md](../../docs/policy/CODE_OF_CONDUCT.md).
 
-For security-related issues, please see our [Security Policy](SECURITY.md) — **do not** open a public issue for vulnerabilities.
+For security-related issues, please see our [Security Policy](../../docs/policy/SECURITY.md) — **do not** open a public issue for vulnerabilities.
 ```
 
 The existing line `This project adheres to the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct).` should be replaced with:
 ```markdown
-This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+This project adheres to the [Contributor Covenant Code of Conduct](../../docs/policy/CODE_OF_CONDUCT.md).
 ```
 
 ---
@@ -536,11 +536,11 @@ This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDU
 
 ### 9.1 Add Security & Code of Conduct links to the documentation section
 
-After the existing `[Disaster Recovery Runbook](RUNBOOK.md)` bullet, add:
+After the existing `[Disaster Recovery Runbook](docs/project/RUNBOOK.md)` bullet, add:
 ```markdown
-*   [Security Policy](SECURITY.md)
-*   [Code of Conduct](CODE_OF_CONDUCT.md)
-*   [Changelog](CHANGELOG.md)
+*   [Security Policy](docs/policy/SECURITY.md)
+*   [Code of Conduct](docs/policy/CODE_OF_CONDUCT.md)
+*   [Changelog](docs/project/CHANGELOG.md)
 ```
 
 ### 9.2 Add a "Security" section before the "License" section
@@ -548,7 +548,7 @@ After the existing `[Disaster Recovery Runbook](RUNBOOK.md)` bullet, add:
 ```markdown
 ## 🔒 Security
 
-If you discover a security vulnerability, please see our [Security Policy](SECURITY.md) for responsible disclosure instructions. **Do not** open a public GitHub issue for security concerns.
+If you discover a security vulnerability, please see our [Security Policy](docs/policy/SECURITY.md) for responsible disclosure instructions. **Do not** open a public GitHub issue for security concerns.
 ```
 
 ---
