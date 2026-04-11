@@ -46,7 +46,8 @@ impl<R: AllocationRepository> ReaperService<R> {
             WITH target_leases AS (
                 SELECT id 
                 FROM leases 
-                WHERE status = 'ACTIVE' AND expires_at <= NOW()
+                WHERE status = 'ACTIVE' 
+                  AND (expires_at <= NOW() OR last_heartbeat_at < NOW() - INTERVAL '60 seconds')
                 LIMIT $1
                 FOR UPDATE SKIP LOCKED
             )

@@ -9,10 +9,10 @@ endif
 setup: db migrate
 
 db:
-	docker-compose up -d
+	docker-compose -f infra/docker-compose.yml up -d
 
 migrate:
-	sqlx migrate run
+	sqlx migrate run --source infra/migrations
 
 run:
 	cargo run
@@ -29,4 +29,4 @@ lint:
 
 clean:
 	cargo clean
-	docker-compose down
+	docker-compose -f infra/docker-compose.yml down

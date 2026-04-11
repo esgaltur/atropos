@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use std::time::Duration;
 use tokio::time;
 use tracing::{error, info};
@@ -13,11 +13,59 @@ impl MaintenanceService {
     }
 
     pub async fn run(&self) {
-        // Run maintenance every hour (in production this might be every 24h)
-        let mut interval = time::interval(Duration::from_secs(3600));
+        let mut prune_interval = time::interval(Duration::from_secs(3600));
+        let mut health_interval = time::interval(Duration::from_secs(60));
         loop {
-            interval.tick().await;
-            self.prune_database().await;
+            tokio::select! {
+                _ = prune_interval.tick() => {
+                    self.prune_database().await;
+                }
+                _ = health_interval.tick() => {
+                    self.check_resource_health().await;
+                }
+            }
+        }
+    }
+
+    async fn check_resource_health(&self) {
+        // Find a batch of Healthy resources to check
+        let rows = sqlx::query("SELECT id, external_id FROM resources WHERE status = 'Healthy' LIMIT 100")
+            .fetch_all(&self.pool)
+            .await;
+
+        if let Ok(resources) = rows {
+            for row in resources {
+                let id: uuid::Uuid = row.get("id");
+                let external_id: String = row.get("external_id");
+                
+                // Simulate checking external API (e.g. K8s Node status)
+                let is_healthy = self.ping_external_system(&external_id).await;
+
+                if !is_healthy {
+                    info!("Resource {} ({}) failed health check. Moving to Draining.", id, external_id);
+                    sqlx::query("UPDATE resources SET status = 'Draining' WHERE id = $1")
+                        .bind(id)
+                        .execute(&self.pool)
+                        .await
+                        .ok();
+                    
+                    sqlx::query("INSERT INTO audit_log (action, resource_id, details) VALUES ('AUTO_DRAIN', $1, $2)")
+                        .bind(id)
+                        .bind(serde_json::json!({ "reason": "health_check_failed" }))
+                        .execute(&self.pool)
+                        .await
+                        .ok();
+                }
+            }
+        }
+    }
+
+    async fn ping_external_system(&self, _external_id: &str) -> bool {
+        // Simulated: Use system time to fail randomly (~1% chance)
+        if let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            duration.subsec_nanos() % 100 != 0
+        } else {
+            true // Default to healthy if time fails
         }
     }
 

@@ -7,36 +7,32 @@ use crate::domain::{
 };
 use moka::future::Cache;
 use std::sync::Arc;
-use std::time::Duration;
+use uuid::Uuid;
 
-/// The core application service responsible for orchestrating resource allocations and leases.
-///
-/// This service coordinates between the domain logic and the infrastructure repositories,
-/// providing high-level use cases for resource management, including allocation with
-/// optional waitlisting and preemption.
-#[derive(Clone)]
 pub struct AllocationService<R: AllocationRepository + PoolRepository> {
     repo: Arc<R>,
-    #[allow(dead_code)]
-    pool_cache: Cache<String, Pool>,
+    // Optional caching layer for fast capacity checks
+    cache: Cache<String, i64>,
 }
 
 impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
-    /// Creates a new instance of the `AllocationService` with an internal cache for performance.
     pub fn new(repo: Arc<R>) -> Self {
-        let pool_cache = Cache::builder()
-            .max_capacity(100)
-            .time_to_live(Duration::from_secs(30))
-            .build();
-
-        Self { repo, pool_cache }
+        Self {
+            repo,
+            cache: Cache::new(1000),
+        }
     }
 
-    /// Attempts to allocate a resource from a specified pool.
+    /// Primary entry point for allocating a resource from a pool.
     ///
-    /// # Parameters
-    /// - `pool_type`: The type of resource requested (e.g., "A100-GPU").
-    /// - `owner_id`: The identifier of the entity requesting the resource.
+    /// This method manages the high-level flow:
+    /// 1. Attempt database-native atomic allocation (SKIP LOCKED).
+    /// 2. If pool is full and waitlist is enabled, queue the request.
+    /// 3. Returns a `Lease` on success or an Error on failure/waitlist.
+    ///
+    /// # Arguments
+    /// - `pool_type`: The type of resource requested (e.g., "GPU").
+    /// - `owner_id`: Unique identifier for the user/service requesting the resource.
     /// - `tenant_id`: The project or tenant context for the allocation.
     /// - `ttl_seconds`: Duration in seconds for which the resource is leased.
     /// - `idempotency_key`: Optional key to prevent double-allocations on retry.
@@ -48,43 +44,40 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
         pool_type: String,
         owner_id: String,
         tenant_id: String,
+        priority: i32,
         ttl_seconds: i64,
+        constraints: Option<serde_json::Value>,
+        spread_by: Option<String>,
         idempotency_key: Option<String>,
         waitlist: Option<bool>,
         preempt: Option<bool>,
     ) -> Result<Lease, DomainError> {
-        // 1. Caching Layer Check
-        // If we had pool_id we'd cache by ID, for now by type name
-
+        // 1. Attempt allocation
         let result = self
             .repo
             .allocate_resource(
                 pool_type.clone(),
                 owner_id.clone(),
                 tenant_id.clone(),
+                if preempt.unwrap_or(false) { priority } else { -2147483648 },
                 ttl_seconds,
+                constraints,
+                spread_by,
                 idempotency_key.clone(),
                 None,
             )
             .await;
 
         match result {
-            Err(DomainError::NoResourcesAvailable) if preempt.unwrap_or(false) => {
-                tracing::info!("Pool {} is full. Attempting preemption...", pool_type);
-                // In a real system we'd find the oldest/lowest priority lease here
-                Err(DomainError::InfrastructureError(
-                    "Preemption required but logic in repo is pending".to_string(),
-                ))
-            }
             Err(DomainError::NoResourcesAvailable) if waitlist.unwrap_or(false) => {
                 tracing::info!(
-                    "Pool {} is full. Adding {} to waitlist.",
+                    "Pool {} is full and no preemption possible. Adding {} to waitlist.",
                     pool_type,
                     owner_id
                 );
                 self.repo
                     .waitlist_resource(
-                        pool_type, owner_id, tenant_id, 0, // Default priority
+                        pool_type, owner_id, tenant_id, priority,
                     )
                     .await?;
                 Err(DomainError::InfrastructureError(
@@ -117,6 +110,11 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
         extension_seconds: i64,
     ) -> Result<(), DomainError> {
         self.repo.renew_lease(&lease_id, extension_seconds).await
+    }
+
+    /// Reports that the client holding the lease is still active.
+    pub async fn heartbeat(&self, lease_id: LeaseId) -> Result<(), DomainError> {
+        self.repo.heartbeat_lease(&lease_id).await
     }
 
     /// Retrieves aggregate statistics for all resource pools and active leases.

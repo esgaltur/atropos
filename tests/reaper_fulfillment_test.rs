@@ -60,7 +60,7 @@ async fn test_reaper_waitlist_fulfillment() {
     .unwrap();
 
     // Create an EXPIRED lease
-    sqlx::query("INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, expires_at) VALUES ($1, $2, 'old-user', 't1', 'ACTIVE', $3)")
+    sqlx::query("INSERT INTO leases (id, resource_id, owner_id, tenant_id, priority, status, expires_at) VALUES ($1, $2, 'old-user', 't1', 0, 'ACTIVE', $3)")
         .bind(Uuid::new_v4())
         .bind(res_id)
         .bind(Utc::now() - Duration::minutes(10))

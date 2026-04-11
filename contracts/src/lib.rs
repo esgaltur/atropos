@@ -47,6 +47,8 @@ pub struct RegisterResourceRequest {
 pub struct AllocateRequest {
     pub pool_type: String,
     pub constraints: Option<serde_json::Value>,
+    pub spread_by: Option<String>, // e.g., "rack_id"
+    pub priority: Option<i32>,
     pub ttl_seconds: i64,
     pub idempotency_key: Option<String>,
     pub waitlist: Option<bool>,

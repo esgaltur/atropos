@@ -54,7 +54,9 @@ impl AllocationRepository for MockRepository {
         _pool: String,
         owner: String,
         tenant: String,
+        priority: i32,
         ttl: i64,
+        _constraints: Option<serde_json::Value>,
         key: Option<String>,
         _cost: Option<String>,
     ) -> impl Future<Output = Result<Lease, DomainError>> + Send {
@@ -80,6 +82,7 @@ impl AllocationRepository for MockRepository {
                     resource_id: ResourceId::new(),
                     owner_id: owner.clone(),
                     tenant_id: tenant,
+                    priority,
                     status: LeaseStatus::Active,
                     created_at: Utc::now(),
                     expires_at: Utc::now() + chrono::Duration::seconds(ttl),
@@ -158,6 +161,13 @@ impl AllocationRepository for MockRepository {
         }
     }
 
+    fn heartbeat_lease(
+        &self,
+        _id: &LeaseId,
+    ) -> impl Future<Output = Result<(), DomainError>> + Send {
+        async { Ok(()) }
+    }
+
     fn get_summary_stats(&self) -> impl Future<Output = Result<SummaryStats, DomainError>> + Send {
         let leases = self.leases.clone();
         let total = self.total_resources.clone();
@@ -218,7 +228,7 @@ fn set_available(world: &mut AtroposWorld, count: i32, _status: String) {
 async fn request_gpu(world: &mut AtroposWorld, team: String) {
     let service = AllocationService::new(Arc::new(world.repo.clone()));
     let res = service
-        .allocate("GPU".into(), "user-01".into(), team, 60, None, None, None)
+        .allocate("GPU".into(), "user-01".into(), team, 0, 60, None, None, None, None, None)
         .await;
     world.last_results.push(res);
 }
@@ -236,7 +246,10 @@ async fn request_gpu_idem(world: &mut AtroposWorld, team: String, key: String) {
             "GPU".into(),
             "user-01".into(),
             team,
+            0,
             60,
+            None,
+            None,
             Some(key),
             None,
             None,
@@ -258,7 +271,9 @@ async fn request_gpu_waitlist(world: &mut AtroposWorld, team: String) {
             "GPU".into(),
             "user-01".into(),
             team,
+            0,
             60,
+            None,
             None,
             Some(true),
             None,
@@ -447,5 +462,8 @@ mod tests {
         AtroposWorld::run("tests/features/allocation.feature").await;
         AtroposWorld::run("tests/features/lifecycle.feature").await;
         AtroposWorld::run("tests/features/observability.feature").await;
+    }
+}
+lity.feature").await;
     }
 }

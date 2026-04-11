@@ -8,7 +8,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use atropos::api::routes::{create_router, AppState};
 use atropos::application::{
     allocation_service::AllocationService, maintenance::MaintenanceService,
-    pool_service::PoolService, reaper::ReaperService, resource_service::ResourceService,
+    outbox::OutboxService, pool_service::PoolService, reaper::ReaperService,
+    resource_service::ResourceService,
 };
 use atropos::infrastructure::postgres_repository::PostgresRepository;
 
@@ -59,6 +60,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         maintenance.run().await;
     });
 
+    // 5c. BACKGROUND OUTBOX
+    let outbox = OutboxService::new(pool.clone());
+    let outbox_handle = tokio::spawn(async move {
+        tracing::info!("Starting background Outbox Service...");
+        outbox.run().await;
+    });
+
     let app_state = AppState {
         pool_service,
         resource_service,
@@ -94,6 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Shutting down. Waiting for background tasks...");
     reaper_handle.abort();
     maintenance_handle.abort();
+    outbox_handle.abort();
 
     Ok(())
 }

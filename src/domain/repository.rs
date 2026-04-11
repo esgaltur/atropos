@@ -27,7 +27,10 @@ pub trait AllocationRepository: Send + Sync {
         pool_type: String,
         owner_id: String,
         tenant_id: String,
+        priority: i32,
         ttl_seconds: i64,
+        constraints: Option<serde_json::Value>,
+        spread_by: Option<String>,
         idempotency_key: Option<String>,
         cost_center: Option<String>,
     ) -> impl Future<Output = Result<Lease, DomainError>> + Send;
@@ -49,6 +52,11 @@ pub trait AllocationRepository: Send + Sync {
         owner_id: String,
         tenant_id: String,
         priority: i32,
+    ) -> impl Future<Output = Result<(), DomainError>> + Send;
+
+    fn heartbeat_lease(
+        &self,
+        lease_id: &LeaseId,
     ) -> impl Future<Output = Result<(), DomainError>> + Send;
 
     fn get_summary_stats(&self) -> impl Future<Output = Result<SummaryStats, DomainError>> + Send;

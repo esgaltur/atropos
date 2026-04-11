@@ -11,10 +11,9 @@ use crate::domain::{
         AllocationRepository, AuditLogEntry, PoolRepository, ResourceRepository, SummaryStats,
     },
     resource::Resource,
-    AllocationPolicy, LeaseId, LeaseStatus, PoolId, ResourceId, ResourceStatus,
+    LeaseId, LeaseStatus, PoolId, ResourceId, ResourceStatus,
 };
 
-#[derive(Clone)]
 pub struct PostgresRepository {
     pool: PgPool,
 }
@@ -55,10 +54,11 @@ impl PoolRepository for PostgresRepository {
         let db_pool = self.pool.clone();
         let query_id = id.0;
         async move {
-            let record = sqlx::query(
+            let row = sqlx::query(
                 r#"
                 SELECT id, name, resource_type, policy, created_at
-                FROM pools WHERE id = $1
+                FROM pools
+                WHERE id = $1
                 "#,
             )
             .bind(query_id)
@@ -66,49 +66,36 @@ impl PoolRepository for PostgresRepository {
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            if let Some(row) = record {
-                let id: Uuid = row.try_get("id").unwrap_or_default();
-                let name: String = row.try_get("name").unwrap_or_default();
-                let resource_type: String = row.try_get("resource_type").unwrap_or_default();
-                let policy_str: String = row.try_get("policy").unwrap_or_default();
-                let created_at: Option<chrono::DateTime<Utc>> =
-                    row.try_get("created_at").unwrap_or_default();
+            let pool = row.map(|r| Pool {
+                id: PoolId(r.get("id")),
+                name: r.get("name"),
+                resource_type: r.get("resource_type"),
+                policy: r.get::<String, _>("policy").parse().unwrap(),
+                created_at: r.get("created_at"),
+            });
 
-                let policy = policy_str.parse::<AllocationPolicy>().map_err(|_| {
-                    DomainError::InfrastructureError("Invalid policy in DB".to_string())
-                })?;
-
-                Ok(Some(Pool {
-                    id: PoolId(id),
-                    name,
-                    resource_type,
-                    policy,
-                    created_at: created_at.unwrap_or_else(Utc::now),
-                }))
-            } else {
-                Ok(None)
-            }
+            Ok(pool)
         }
     }
 }
 
 impl ResourceRepository for PostgresRepository {
-    fn create(&self, resource: Resource) -> impl Future<Output = Result<(), DomainError>> + Send {
+    fn create(&self, res: Resource) -> impl Future<Output = Result<(), DomainError>> + Send {
         let db_pool = self.pool.clone();
         async move {
             sqlx::query(
                 r#"
                 INSERT INTO resources (id, pool_id, external_id, status, attributes, version, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                "#
+                "#,
             )
-            .bind(resource.id.0)
-            .bind(resource.pool_id.0)
-            .bind(resource.external_id)
-            .bind(resource.status.to_string())
-            .bind(resource.attributes)
-            .bind(resource.version)
-            .bind(resource.updated_at)
+            .bind(res.id.0)
+            .bind(res.pool_id.0)
+            .bind(res.external_id)
+            .bind(res.status.to_string())
+            .bind(res.attributes)
+            .bind(res.version)
+            .bind(res.updated_at)
             .execute(&db_pool)
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
@@ -124,10 +111,11 @@ impl ResourceRepository for PostgresRepository {
         let db_pool = self.pool.clone();
         let query_id = id.0;
         async move {
-            let record = sqlx::query(
+            let row = sqlx::query(
                 r#"
                 SELECT id, pool_id, external_id, status, attributes, version, updated_at
-                FROM resources WHERE id = $1
+                FROM resources
+                WHERE id = $1
                 "#,
             )
             .bind(query_id)
@@ -135,37 +123,17 @@ impl ResourceRepository for PostgresRepository {
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            if let Some(row) = record {
-                let id: Uuid = row.try_get("id").unwrap_or_default();
-                let pool_id: Option<Uuid> = row.try_get("pool_id").unwrap_or_default();
-                let external_id: String = row.try_get("external_id").unwrap_or_default();
-                let status_str: String = row.try_get("status").unwrap_or_default();
-                let attributes: Option<serde_json::Value> =
-                    row.try_get("attributes").unwrap_or_default();
-                let version: Option<i64> = row.try_get("version").unwrap_or_default();
-                let updated_at: Option<chrono::DateTime<Utc>> =
-                    row.try_get("updated_at").unwrap_or_default();
+            let res = row.map(|r| Resource {
+                id: ResourceId(r.get("id")),
+                pool_id: PoolId(r.get("pool_id")),
+                external_id: r.get("external_id"),
+                status: r.get::<String, _>("status").parse().unwrap(),
+                attributes: r.get("attributes"),
+                version: r.get("version"),
+                updated_at: r.get("updated_at"),
+            });
 
-                let status = status_str.parse::<ResourceStatus>().map_err(|_| {
-                    DomainError::InfrastructureError("Invalid status in DB".to_string())
-                })?;
-
-                let pool_id_uuid = pool_id.ok_or_else(|| {
-                    DomainError::InfrastructureError("Missing pool_id".to_string())
-                })?;
-
-                Ok(Some(Resource {
-                    id: ResourceId(id),
-                    pool_id: PoolId(pool_id_uuid),
-                    external_id,
-                    status,
-                    attributes: attributes.unwrap_or_default(),
-                    version: version.unwrap_or(0),
-                    updated_at: updated_at.unwrap_or_else(Utc::now),
-                }))
-            } else {
-                Ok(None)
-            }
+            Ok(res)
         }
     }
 }
@@ -176,7 +144,10 @@ impl AllocationRepository for PostgresRepository {
         pool_type: String,
         owner_id: String,
         tenant_id: String,
+        priority: i32,
         ttl_seconds: i64,
+        constraints: Option<serde_json::Value>,
+        spread_by: Option<String>,
         idempotency_key: Option<String>,
         cost_center: Option<String>,
     ) -> impl Future<Output = Result<Lease, DomainError>> + Send {
@@ -187,52 +158,154 @@ impl AllocationRepository for PostgresRepository {
                 .await
                 .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            // I originally tried using a mutex here, but I realized it wouldn't scale
-            // across multiple API nodes. Switching to SKIP LOCKED was a bit of a
-            // "lightbulb moment" for handling the concurrency at the DB level.
-            // It's much cleaner and lets Postgres handle the heavy lifting.
-            let resource_record = sqlx::query(
+            // 0. Quota Check
+            let quota_record = sqlx::query(
                 r#"
-                SELECT r.id
-                FROM resources r
-                JOIN pools p ON r.pool_id = p.id
-                WHERE p.resource_type = $1 AND r.status = 'Healthy'
-                AND NOT EXISTS (
-                    SELECT 1 FROM leases l
-                    WHERE l.resource_id = r.id AND l.status = 'ACTIVE' AND l.expires_at > NOW()
-                )
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-                "#,
+                SELECT max_active_leases 
+                FROM tenant_quotas 
+                WHERE tenant_id = $1 AND pool_type = $2
+                "#
             )
+            .bind(&tenant_id)
             .bind(&pool_type)
             .fetch_optional(&mut *tx)
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            let resource_id: Uuid = match resource_record {
-                Some(record) => record
-                    .try_get("id")
-                    .map_err(|_| DomainError::InfrastructureError("Missing id".to_string()))?,
-                None => return Err(DomainError::NoResourcesAvailable),
+            if let Some(row) = quota_record {
+                let max_leases: i32 = row.try_get("max_active_leases").unwrap_or(0);
+                
+                let (current_leases,): (i64,) = sqlx::query_as(
+                    r#"
+                    SELECT COUNT(*) 
+                    FROM leases l
+                    JOIN resources r ON l.resource_id = r.id
+                    JOIN pools p ON r.pool_id = p.id
+                    WHERE l.tenant_id = $1 AND p.resource_type = $2 AND l.status = 'ACTIVE'
+                    "#
+                )
+                .bind(&tenant_id)
+                .bind(&pool_type)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+                if current_leases >= max_leases as i64 {
+                    return Err(DomainError::InfrastructureError(format!("Tenant quota of {} exceeded for pool {}", max_leases, pool_type)));
+                }
+            }
+
+            // 1. Standard Allocation with Rack Anti-Affinity
+            let resource_record = sqlx::query(
+                r#"
+                SELECT r.id
+                FROM resources r
+                JOIN pools p ON r.pool_id = p.id
+                LEFT JOIN (
+                    SELECT res.rack_id, COUNT(*) as tenant_rack_count
+                    FROM leases l
+                    JOIN resources res ON l.resource_id = res.id
+                    WHERE l.tenant_id = $3 AND l.status = 'ACTIVE'
+                    GROUP BY res.rack_id
+                ) rack_usage ON r.rack_id = rack_usage.rack_id
+                WHERE p.resource_type = $1 
+                  AND r.status = 'Healthy'
+                  AND ($2::jsonb IS NULL OR r.attributes @> $2::jsonb)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM leases l
+                    WHERE l.resource_id = r.id AND l.status = 'ACTIVE' AND l.expires_at > NOW()
+                )
+                ORDER BY (CASE WHEN $4 = 'rack_id' THEN tenant_rack_count ELSE 0 END) ASC NULLS FIRST
+                LIMIT 1
+                FOR UPDATE OF r SKIP LOCKED
+                "#,
+            )
+            .bind(&pool_type)
+            .bind(&constraints)
+            .bind(&tenant_id)
+            .bind(&spread_by)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            let (resource_id, preemption_occured) = match resource_record {
+                Some(record) => (
+                    record.get::<Uuid, _>("id"),
+                    false
+                ),
+                None => {
+                    // 2. Preemption: Find active lease in the pool with lower priority + Attribute Match
+                    let preempt_record = sqlx::query(
+                        r#"
+                        SELECT l.id as lease_id, l.resource_id
+                        FROM leases l
+                        JOIN resources r ON l.resource_id = r.id
+                        JOIN pools p ON r.pool_id = p.id
+                        WHERE p.resource_type = $1 
+                          AND l.status = 'ACTIVE' 
+                          AND l.expires_at > NOW()
+                          AND l.priority < $2
+                          AND ($3::jsonb IS NULL OR r.attributes @> $3::jsonb)
+                        ORDER BY l.priority ASC, l.expires_at ASC
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                        "#
+                    )
+                    .bind(&pool_type)
+                    .bind(priority)
+                    .bind(&constraints)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+                    if let Some(row) = preempt_record {
+                        let old_lease_id: Uuid = row.get("lease_id");
+                        let res_id: Uuid = row.get("resource_id");
+
+                        // Revoke old lease
+                        sqlx::query("UPDATE leases SET status = 'REVOKED' WHERE id = $1")
+                            .bind(old_lease_id)
+                            .execute(&mut *tx)
+                            .await
+                            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+                        
+                        sqlx::query(
+                            "INSERT INTO audit_log (action, lease_id, details) VALUES ('PREEMPT_REVOKE', $1, $2)"
+                        )
+                        .bind(old_lease_id)
+                        .bind(serde_json::json!({ "new_owner": owner_id, "new_priority": priority }))
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+                        // Outbox Event for Preempt
+                        sqlx::query("INSERT INTO outbox_events (id, event_type, payload) VALUES ($1, 'LEASE_REVOKED', $2)")
+                            .bind(Uuid::new_v4())
+                            .bind(serde_json::json!({ "lease_id": old_lease_id, "resource_id": res_id, "reason": "PREEMPTED" }))
+                            .execute(&mut *tx).await.ok();
+
+                        (res_id, true)
+                    } else {
+                        return Err(DomainError::NoResourcesAvailable);
+                    }
+                }
             };
 
             let lease_id = Uuid::new_v4();
             let now = Utc::now();
             let expires_at = now + chrono::Duration::seconds(ttl_seconds);
 
-            // TODO(esgaltur): I should probably check if the owner already has too many
-            // active leases before allowing a new one. Adding a quota system is on my list.
             sqlx::query(
                 r#"
-                INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, created_at, expires_at, idempotency_key, cost_center)
-                VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6, $7, $8)
+                INSERT INTO leases (id, resource_id, owner_id, tenant_id, priority, status, created_at, expires_at, idempotency_key, cost_center, last_heartbeat_at)
+                VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8, $9, $6)
                 "#
             )
             .bind(lease_id)
             .bind(resource_id)
             .bind(&owner_id)
             .bind(&tenant_id)
+            .bind(priority)
             .bind(now)
             .bind(expires_at)
             .bind(&idempotency_key)
@@ -241,20 +314,30 @@ impl AllocationRepository for PostgresRepository {
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            let details = serde_json::json!({ "ttl": ttl_seconds, "pool": pool_type });
+            let action = if preemption_occured { "PREEMPT_ALLOCATE" } else { "ALLOCATE" };
+            let details = serde_json::json!({ "ttl": ttl_seconds, "pool": pool_type, "priority": priority });
             sqlx::query(
                 r#"
                 INSERT INTO audit_log (actor_id, action, resource_id, lease_id, details)
-                VALUES ($1, 'ALLOCATE', $2, $3, $4)
+                VALUES ($1, $2, $3, $4, $5)
                 "#,
             )
             .bind(&owner_id)
+            .bind(action)
             .bind(resource_id)
             .bind(lease_id)
             .bind(details)
             .execute(&mut *tx)
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            // Outbox Event for Granted Lease
+            sqlx::query("INSERT INTO outbox_events (id, event_type, payload) VALUES ($1, 'LEASE_GRANTED', $2)")
+                .bind(Uuid::new_v4())
+                .bind(serde_json::json!({ "lease_id": lease_id, "resource_id": resource_id, "owner_id": owner_id, "tenant_id": tenant_id }))
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
             tx.commit()
                 .await
@@ -265,6 +348,7 @@ impl AllocationRepository for PostgresRepository {
                 resource_id: ResourceId(resource_id),
                 owner_id,
                 tenant_id,
+                priority,
                 status: LeaseStatus::Active,
                 created_at: now,
                 expires_at,
@@ -383,6 +467,28 @@ impl AllocationRepository for PostgresRepository {
         }
     }
 
+    fn heartbeat_lease(
+        &self,
+        lease_id: &LeaseId,
+    ) -> impl Future<Output = Result<(), DomainError>> + Send {
+        let db_pool = self.pool.clone();
+        let query_id = lease_id.0;
+        async move {
+            let res = sqlx::query(
+                "UPDATE leases SET last_heartbeat_at = NOW() WHERE id = $1 AND status = 'ACTIVE'"
+            )
+            .bind(query_id)
+            .execute(&db_pool)
+            .await
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+            if res.rows_affected() == 0 {
+                return Err(DomainError::LeaseNotFound);
+            }
+            Ok(())
+        }
+    }
+
     fn get_summary_stats(&self) -> impl Future<Output = Result<SummaryStats, DomainError>> + Send {
         let db_pool = self.pool.clone();
         async move {
@@ -459,13 +565,13 @@ impl AllocationRepository for PostgresRepository {
                 .await
                 .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            // 1. Find next waitlist entry
+            // 1. Find next waitlist entry with Priority Aging
             let waitlist_record = sqlx::query(
                 r#"
-                SELECT id, owner_id, tenant_id
+                SELECT id, owner_id, tenant_id, priority
                 FROM waitlist_entries
                 WHERE pool_type = $1
-                ORDER BY priority DESC, created_at ASC
+                ORDER BY (priority + (EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600)::int * 10) DESC, created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
                 "#,
@@ -475,11 +581,12 @@ impl AllocationRepository for PostgresRepository {
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
 
-            let (waitlist_id, owner_id, tenant_id) = match waitlist_record {
+            let (waitlist_id, owner_id, tenant_id, priority) = match waitlist_record {
                 Some(row) => (
                     row.get::<Uuid, _>("id"),
                     row.get::<String, _>("owner_id"),
                     row.get::<String, _>("tenant_id"),
+                    row.get::<i32, _>("priority"),
                 ),
                 None => return Ok(None),
             };
@@ -516,14 +623,15 @@ impl AllocationRepository for PostgresRepository {
 
             sqlx::query(
                 r#"
-                INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, created_at, expires_at)
-                VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6)
+                INSERT INTO leases (id, resource_id, owner_id, tenant_id, priority, status, created_at, expires_at, last_heartbeat_at)
+                VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $6)
                 "#
             )
             .bind(lease_id)
             .bind(resource_id)
             .bind(&owner_id)
             .bind(&tenant_id)
+            .bind(priority)
             .bind(now)
             .bind(expires_at)
             .execute(&mut *tx)
@@ -545,7 +653,7 @@ impl AllocationRepository for PostgresRepository {
             .bind(&owner_id)
             .bind(resource_id)
             .bind(lease_id)
-            .bind(serde_json::json!({ "pool": pool_type, "waitlist_id": waitlist_id }))
+            .bind(serde_json::json!({ "pool": pool_type, "waitlist_id": waitlist_id, "priority": priority }))
             .execute(&mut *tx)
             .await
             .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
@@ -559,6 +667,7 @@ impl AllocationRepository for PostgresRepository {
                 resource_id: ResourceId(resource_id),
                 owner_id,
                 tenant_id,
+                priority,
                 status: LeaseStatus::Active,
                 created_at: now,
                 expires_at,

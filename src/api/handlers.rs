@@ -162,7 +162,10 @@ pub async fn allocate_lease(
             payload.pool_type,
             payload.owner_id,
             payload.tenant_id,
+            payload.priority.unwrap_or(0),
             payload.ttl_seconds,
+            payload.constraints,
+            payload.spread_by,
             payload.idempotency_key,
             payload.waitlist,
             payload.preempt,
@@ -180,20 +183,31 @@ pub async fn allocate_lease(
 
 pub async fn renew_lease(
     State(state): State<AppState<impl AppRepository>>,
-    Path(id): Path<Uuid>,
+    Path(id): Path<uuid::Uuid>,
     Json(payload): Json<RenewRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let result = state
+    match state
         .allocation_service
         .renew(LeaseId(id), payload.extension_seconds)
-        .await;
+        .await
+    {
+        Ok(_) => Ok(StatusCode::NO_CONTENT),
+        Err(DomainError::LeaseNotFound) => {
+            Err((StatusCode::NOT_FOUND, "Lease not found".to_string()))
+        }
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
+}
 
-    match result {
-        Ok(_) => Ok(StatusCode::OK),
-        Err(DomainError::LeaseNotFound) => Err((
-            StatusCode::NOT_FOUND,
-            "Lease not found or not active".to_string(),
-        )),
+pub async fn heartbeat_lease(
+    State(state): State<AppState<impl AppRepository>>,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    match state.allocation_service.heartbeat(LeaseId(id)).await {
+        Ok(_) => Ok(StatusCode::NO_CONTENT),
+        Err(DomainError::LeaseNotFound) => {
+            Err((StatusCode::NOT_FOUND, "Lease not found".to_string()))
+        }
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
     }
 }

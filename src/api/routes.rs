@@ -48,5 +48,6 @@ pub fn create_router<R: AppRepository>(state: AppState<R>) -> Router {
         .route("/leases", post(handlers::allocate_lease))
         .route("/leases/:id", delete(handlers::release_lease))
         .route("/leases/:id/renew", post(handlers::renew_lease))
+        .route("/leases/:id/heartbeat", post(handlers::heartbeat_lease))
         .with_state(state)
 }

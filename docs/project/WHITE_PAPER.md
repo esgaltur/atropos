@@ -22,8 +22,18 @@ Atropos implements a **Hexagonal (Ports and Adapters) Architecture**. This ensur
 *   **Application Layer:** Use-case orchestration.
 *   **Infrastructure Layer:** SQLx-based Postgres persistence.
 
-## 5. Lifecycle Orchestration: The Reaper
-To prevent resource leakage, Atropos employs an autonomous background Reaper service. This service provides deterministic reclamation of expired leases, ensuring that resources are returned to the pool exactly when their TTL expires, without requiring manual intervention or lazy read-time triggers.
+## 5. Lifecycle Orchestration: The Reaper & Outbox
+To prevent resource leakage, Atropos employs an autonomous background Reaper service. This service provides deterministic reclamation of expired leases and handles "Zombie" client detection via a liveness heartbeating mechanism.
 
-## 6. Conclusion
-Atropos represents a leap forward in resource orchestration, moving away from fragile application-level synchronization toward database-native atomic operations. Its design optimizes for high-concurrency data center workloads where performance and consistency are non-negotiable.
+Furthermore, Atropos utilizes the **Transactional Outbox Pattern** to provide reliable event notifications. Every state transition (Allocation, Preemption, Expiration) is persisted to an `outbox_events` table within the same transaction as the resource claim, guaranteeing "At-Least-Once" delivery to downstream webhooks or message brokers.
+
+## 6. Advanced Scheduling: Priority, Quotas, and Anti-Affinity
+Atropos extends basic pooling with sophisticated governance:
+*   **Priority-Based Preemption:** Implements a multi-stage atomic transaction that can revoke active low-priority leases to fulfill high-priority requests if the pool is saturated.
+*   **Attribute Routing:** Leverages PostgreSQL JSONB operators to filter candidate resources against arbitrary client-provided constraints.
+*   **Tenant Quotas:** Enforces per-tenant concurrency limits within the allocation path to prevent resource monopolization.
+*   **Waitlist Aging:** Mitigates low-priority starvation by dynamically increasing the "Effective Priority" of tasks based on their queue duration.
+*   **Soft Anti-Affinity:** Optimizes workload distribution across physical failure domains (e.g., racks) by prioritizing resources in unused zones.
+
+## 7. Conclusion
+Atropos represents a leap forward in resource orchestration, moving away from fragile application-level synchronization toward database-native atomic operations coupled with advanced governance. Its design optimizes for high-concurrency data center workloads where performance, consistency, and fairness are non-negotiable.

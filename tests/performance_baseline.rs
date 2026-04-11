@@ -69,13 +69,14 @@ async fn test_reaper_performance_baseline() {
     // Batch insert for leases (expired)
     for chunk in resources.chunks(100) {
         let mut qb = sqlx::QueryBuilder::new(
-            "INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, expires_at) ",
+            "INSERT INTO leases (id, resource_id, owner_id, tenant_id, priority, status, expires_at) ",
         );
         qb.push_values(chunk, |mut b, &res_id| {
             b.push_bind(Uuid::new_v4())
                 .push_bind(res_id)
                 .push_bind("bench-owner")
                 .push_bind("bench-tenant")
+                .push_bind(0)
                 .push_bind("ACTIVE")
                 .push_bind(Utc::now() - Duration::minutes(10));
         });

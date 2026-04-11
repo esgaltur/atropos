@@ -70,26 +70,37 @@ POST /resources
 ```
 
 ### Step 3: Request a Lease (The "Magic" Part)
-Your script asks for a resource.
+Your script asks for a resource. You can now specify priorities, constraints, and distribution rules.
 ```bash
 POST /leases
 {
   "pool_type": "mac-mini",
   "owner_id": "jenkins-job-42",
-  "ttl_seconds": 600
+  "tenant_id": "ios-team",
+  "priority": 100,
+  "ttl_seconds": 600,
+  "preempt": true,
+  "constraints": { "ram": "32GB" },
+  "spread_by": "rack_id"
 }
 ```
 **Response:**
 *   `201 Created`: You got it! Here is your Resource ID.
-*   `409 Conflict`: Sorry, they are all busy.
-*   `202 Accepted`: (If waitlist enabled) You are #3 in line.
+*   `409 Conflict`: Sorry, they are all busy (and you couldn't preempt anyone).
+*   `202 Accepted`: (If waitlist enabled) You are in line. Your priority will "age" up the longer you wait.
 
-### Step 4: Auto-Reclamation
-You don't need to "return" the resource. If you set `ttl_seconds` to 600 (10 minutes), Atropos will **automatically** make the resource available again at 10 minutes and 1 second. 
+### Step 4: Keep it Alive (Heartbeating)
+For long-running jobs, you should "heartbeat" your lease to prove your process hasn't crashed. If a heartbeat is missed for 60 seconds, Atropos may reclaim the resource.
+```bash
+POST /leases/:id/heartbeat
+```
 
 ---
 
 ## 🛡 Reliability Guarantees
-*   **Zero Double-Booking:** It is physically impossible for two people to get the same resource ID at the same time.
-*   **Reaper Service:** A background "cleanup crew" runs every few seconds to find expired leases and free them.
-*   **Audit Trail:** Every allocation is logged, so you know exactly who used what and when.
+*   **Zero Double-Booking:** Guaranteed atomic claims via `SKIP LOCKED`.
+*   **Tenant Quotas:** Admins can set maximum lease counts per team.
+*   **Zombie Reclamation:** Automatic detection of crashed clients via missing heartbeats.
+*   **Auto-Draining:** Background health checks automatically take broken hardware offline.
+*   **Outbox Notifications:** Reliable events for integration with Slack, PagerDuty, or CI/CD.
+

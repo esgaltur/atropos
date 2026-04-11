@@ -47,7 +47,7 @@ async fn test_reaper_batching_concurrency() {
             .bind(format!("res-{}", res_id))
             .execute(&pool).await.unwrap();
 
-        sqlx::query("INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, expires_at) VALUES ($1, $2, 'o', 't', 'ACTIVE', $3)")
+        sqlx::query("INSERT INTO leases (id, resource_id, owner_id, tenant_id, priority, status, expires_at) VALUES ($1, $2, $3, 't1', 0, 'ACTIVE', $4)")
             .bind(Uuid::new_v4())
             .bind(res_id)
             .bind(Utc::now() - Duration::minutes(1))

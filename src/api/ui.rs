@@ -139,7 +139,10 @@ mod tests {
             _pool_type: String,
             _owner_id: String,
             _tenant_id: String,
+            _priority: i32,
             _ttl_seconds: i64,
+            _constraints: Option<serde_json::Value>,
+            _spread_by: Option<String>,
             _idempotency_key: Option<String>,
             _cost_center: Option<String>,
         ) -> impl std::future::Future<Output = Result<Lease, DomainError>> + Send {
@@ -165,6 +168,13 @@ mod tests {
             ready(Err(DomainError::InfrastructureError(
                 "not used in ui tests".to_string(),
             )))
+        }
+
+        fn heartbeat_lease(
+            &self,
+            _lease_id: &LeaseId,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
         }
 
         fn waitlist_resource(

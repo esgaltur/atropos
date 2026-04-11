@@ -66,7 +66,7 @@ async fn test_manual_release_waitlist_fulfillment() {
 
     // Create an ACTIVE lease
     let lease_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO leases (id, resource_id, owner_id, tenant_id, status, expires_at) VALUES ($1, $2, 'current-user', 't1', 'ACTIVE', $3)")
+    sqlx::query("INSERT INTO leases (id, resource_id, owner_id, tenant_id, priority, status, expires_at) VALUES ($1, $2, 'current-user', 't1', 0, 'ACTIVE', $3)")
         .bind(lease_id)
         .bind(res_id)
         .bind(Utc::now() + Duration::hours(1))

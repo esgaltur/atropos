@@ -36,7 +36,10 @@ impl<R: AllocationRepository + PoolRepository + 'static> AllocationService
                 req.pool_type,
                 req.owner_id,
                 req.tenant_id,
+                0, // gRPC request doesn't have priority yet
                 req.ttl_seconds,
+                None, // Constraints
+                None, // spread_by
                 req.idempotency_key,
                 Some(req.waitlist),
                 Some(req.preempt),

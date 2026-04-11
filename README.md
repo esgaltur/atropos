@@ -9,7 +9,7 @@ A high-performance, strictly consistent **Resource Leasing & Capacity Orchestrat
 
 ---
 
-### 📖 [Read the User & Use Case Guide](USER_GUIDE.md)
+### 📖 [Read the User & Use Case Guide](docs/project/USER_GUIDE.md)
 *Learn why Atropos exists, how to use it for GPU clusters, CI/CD farms, and license management.*
 
 ---
@@ -17,9 +17,12 @@ A high-performance, strictly consistent **Resource Leasing & Capacity Orchestrat
 ## 🌟 Key Features
 
 *   **Atomic Allocation:** Zero double-bookings using PostgreSQL `SELECT FOR UPDATE SKIP LOCKED`.
-*   **Time-Bound Leases:** Automated resource reclamation via TTL (Time-To-Live).
-*   **Hexagonal Architecture:** Clean separation between Domain logic and Infrastructure (Postgres/Axum).
-*   **Type-Safe Domain:** Newtype patterns for IDs and strong enums for state transitions.
+*   **Priority-Based Preemption:** High-priority workloads can automatically reclaim resources from lower-priority leases.
+*   **Attribute-Aware Selection:** Request resources based on specific metadata (VRAM, Region, OS) using native JSONB containment queries.
+*   **Tenant Quotas:** Prevent resource monopolization by enforcing limits on concurrent leases per tenant.
+*   **Production Resilience:** Includes Lease Heartbeating (zombie detection), Waitlist Priority Aging (starvation prevention), and Rack-Aware Anti-Affinity.
+*   **Reliable Events (Outbox):** Transactional outbox ensures downstream systems are notified of every grant and revocation without fail.
+*   **Auto-Draining:** Maintenance service automatically monitors hardware health and drains degraded resources.
 *   **High Concurrency:** Built on `tokio` and `sqlx` to handle thousands of requests per second.
 
 ---
@@ -51,7 +54,7 @@ For deep technical insights, Architecture Decision Records (ADRs), and operation
 *   [ADR 0001: Why we use Postgres SKIP LOCKED](docs/adr/0001-postgres-skip-locked.md)
 *   [ADR 0002: Hexagonal Architecture](docs/adr/0002-hexagonal-architecture.md)
 *   [ADR 0003: The Background Reaper](docs/adr/0003-reaper-service.md)
-*   [Disaster Recovery Runbook](RUNBOOK.md)
+*   [Disaster Recovery Runbook](docs/project/RUNBOOK.md)
 
 ---
 
@@ -71,7 +74,7 @@ For deep technical insights, Architecture Decision Records (ADRs), and operation
 
 2.  **Start the Database:**
     ```bash
-    docker-compose up -d
+    docker-compose -f infra/docker-compose.yml up -d
     ```
 
 3.  **Setup Environment:**
@@ -82,7 +85,7 @@ For deep technical insights, Architecture Decision Records (ADRs), and operation
 
 4.  **Run Migrations:**
     ```bash
-    sqlx migrate run
+    sqlx migrate run --source infra/migrations
     ```
 
 5.  **Run the Server:**
@@ -121,7 +124,7 @@ For deep technical insights, Architecture Decision Records (ADRs), and operation
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for our coding standards and pull request process.
+We welcome contributions! Please see [CONTRIBUTING.md](docs/policy/CONTRIBUTING.md) for our coding standards and pull request process.
 
 ---
 

@@ -8,6 +8,7 @@ pub struct Lease {
     pub resource_id: ResourceId,
     pub owner_id: String,
     pub tenant_id: String,
+    pub priority: i32,
     pub status: LeaseStatus,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -20,6 +21,7 @@ impl Lease {
         resource_id: ResourceId,
         owner_id: String,
         tenant_id: String,
+        priority: i32,
         ttl_seconds: i64,
         idempotency_key: Option<String>,
         cost_center: Option<String>,
@@ -30,6 +32,7 @@ impl Lease {
             resource_id,
             owner_id,
             tenant_id,
+            priority,
             status: LeaseStatus::Active,
             created_at: now,
             expires_at: now + Duration::seconds(ttl_seconds),
@@ -48,7 +51,7 @@ impl Lease {
     /// use atropos::domain::{ResourceId, LeaseStatus};
     /// use chrono::{Utc, Duration};
     ///
-    /// let lease = Lease::new(ResourceId::new(), "o".into(), "t".into(), 60, None, None);
+    /// let lease = Lease::new(ResourceId::new(), "o".into(), "t".into(), 0, 60, None, None);
     /// assert_eq!(lease.is_expired(Utc::now() + Duration::seconds(70)), true);
     /// ```
     pub fn is_expired(&self, current_time: DateTime<Utc>) -> bool {
@@ -68,6 +71,7 @@ mod tests {
             resource_id,
             "user1".to_string(),
             "tenant1".to_string(),
+            0,
             ttl,
             None,
             None,
@@ -85,6 +89,7 @@ mod tests {
             resource_id,
             "user1".to_string(),
             "tenant1".to_string(),
+            0,
             ttl,
             None,
             None,
@@ -100,6 +105,7 @@ mod tests {
             ResourceId::new(),
             "user1".to_string(),
             "tenant1".to_string(),
+            0,
             60,
             None,
             None,
