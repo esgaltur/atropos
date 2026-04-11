@@ -57,7 +57,7 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
                 pool_type.clone(),
                 owner_id.clone(),
                 tenant_id.clone(),
-                if preempt.unwrap_or(false) { priority } else { -2147483648 },
+                priority,
                 ttl_seconds,
                 constraints,
                 spread_by,
