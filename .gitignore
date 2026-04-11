@@ -51,6 +51,15 @@ docker-data/
 postgres-data/
 
 # ========================
+# AI / LLM / Agent instructions
+# ========================
+.junie/
+.cursorrules
+.aie/
+ai_instructions/
+llm-instructions.md
+
+# ========================
 # Misc
 # ========================
 *.log
@@ -60,3 +69,4 @@ postgres-data/
 
 /agents/
 /dist/
+agents/
