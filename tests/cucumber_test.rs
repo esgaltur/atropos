@@ -244,6 +244,11 @@ async fn request_gpu(world: &mut AtroposWorld, team: String) {
     world.last_results.push(res);
 }
 
+#[when(expr = "a research team {string} allocates a GPU")]
+async fn research_team_allocates_gpu(world: &mut AtroposWorld, team: String) {
+    request_gpu(world, team).await;
+}
+
 #[when(expr = "a team {string} allocates a GPU")]
 async fn team_allocates_gpu(world: &mut AtroposWorld, team: String) {
     request_gpu(world, team).await;
