@@ -17,12 +17,18 @@ A high-performance, strictly consistent **Resource Leasing & Capacity Orchestrat
 ## 🌟 Key Features
 
 *   **Atomic Allocation:** Zero double-bookings using PostgreSQL `SELECT FOR UPDATE SKIP LOCKED`.
-*   **Priority-Based Preemption:** High-priority workloads can automatically reclaim resources from lower-priority leases.
+*   **Idempotent Requests:** Retries carrying the same `idempotency_key` return the original lease instead of creating duplicates.
+*   **Opt-In Priority Preemption:** High-priority workloads can reclaim resources from lower-priority leases — only when `preempt` is explicitly requested.
 *   **Attribute-Aware Selection:** Request resources based on specific metadata (VRAM, Region, OS) using native JSONB containment queries.
-*   **Tenant Quotas:** Prevent resource monopolization by enforcing limits on concurrent leases per tenant.
-*   **Production Resilience:** Includes Lease Heartbeating (zombie detection), Waitlist Priority Aging (starvation prevention), and Rack-Aware Anti-Affinity.
-*   **Reliable Events (Outbox):** Transactional outbox ensures downstream systems are notified of every grant and revocation without fail.
+*   **Weighted Tenant Quotas:** Prevent monopolization with hard limits, advisory soft limits, and fair-share weights per tenant/pool.
+*   **Pool Capacity Caps:** Optional `max_capacity` per pool, enforced when registering new resources.
+*   **Future Reservations:** Schedule capacity ahead of time; a background promoter allocates a real lease when the reservation becomes due.
+*   **Waitlisting:** Full pools queue requests (`202 Accepted`) with priority aging (starvation prevention) and position lookup.
+*   **Observability & Reporting:** Pool utilization snapshots and active-lease cost reports grouped by tenant or cost center.
+*   **Production Resilience:** Lease Heartbeating (zombie detection), Rack-Aware Anti-Affinity, and DB-backed readiness probes.
+*   **Reliable Events (Outbox):** Transactional outbox with retry/dead-lettering delivers HMAC-signed webhooks for every grant and revocation.
 *   **Auto-Draining:** Maintenance service automatically monitors hardware health and drains degraded resources.
+*   **Optional Authentication:** Bearer-token protection for all mutating REST and gRPC endpoints.
 *   **High Concurrency:** Built on `tokio` and `sqlx` to handle thousands of requests per second.
 
 ---
@@ -35,13 +41,13 @@ The project follows **Domain-Driven Design (DDD)** and **Hexagonal (Ports & Adap
 The "Heart" of the system. Contains pure business logic, entities (Pool, Resource, Lease), and Repository interfaces (Traits). It has **zero** dependencies on external frameworks.
 
 ### The Application Layer (`src/application/`)
-Orchestrates use cases. The `AllocationService` coordinates the flow by calling Domain traits, ensuring that business rules are followed before persistence.
+Orchestrates use cases. `AllocationService` and `PlatformService` coordinate the flow by calling Domain traits, ensuring business rules are followed before persistence. Background services (`ReaperService`, `MaintenanceService`, `OutboxService`, `ReservationService`) handle lifecycle and eventing.
 
 ### The Infrastructure Layer (`src/infrastructure/`)
 Implements the Domain Repository traits using **PostgreSQL**. This is where the critical concurrency logic (Atomic Transactions) resides.
 
 ### The API Layer (`src/api/`)
-The entry point. Implements the REST contract using **Axum**. It handles HTTP-specific concerns like JSON serialization and status code mapping.
+The entry point. Exposes both a **REST** contract (Axum) and a high-performance **gRPC** service (tonic). It handles transport-specific concerns like JSON serialization, status-code mapping, and optional bearer-token authentication.
 
 ---
 
@@ -185,6 +191,7 @@ retried and dead-lettered by the outbox worker.
 - [x] **Milestone 2:** Lifecycle Reaper (Background worker for TTL reclamation) & Metrics.
 - [x] **Milestone 3:** Waitlisting logic, Admin UI, & K8s CRD.
 - [x] **Milestone 4:** Runbook for DR, Load testing, and fully operational release.
+- [x] **Milestone 5:** Capacity orchestration — reservations, weighted quotas, pool capacity caps, utilization & cost reporting, resource status admin, lease labels, HMAC-signed webhooks, and bearer-token auth.
 
 ---
 
