@@ -16,9 +16,14 @@ impl<R: PoolRepository> PoolService<R> {
         name: String,
         resource_type: String,
         policy: AllocationPolicy,
+        max_capacity: Option<i32>,
     ) -> Result<Pool, DomainError> {
-        let pool = Pool::new(name, resource_type, policy);
+        let pool = Pool::new(name, resource_type, policy).with_max_capacity(max_capacity);
         self.repo.create(pool.clone()).await?;
         Ok(pool)
+    }
+
+    pub async fn find_pool_by_name(&self, name: &str) -> Result<Option<Pool>, DomainError> {
+        self.repo.find_by_name(name).await
     }
 }

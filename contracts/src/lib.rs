@@ -34,6 +34,7 @@ pub struct CreatePoolRequest {
     pub name: String,
     pub resource_type: String,
     pub policy: AllocationPolicy,
+    pub max_capacity: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +69,7 @@ pub struct PoolResponse {
     pub name: String,
     pub resource_type: String,
     pub policy: AllocationPolicy,
+    pub max_capacity: Option<i32>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -93,6 +95,103 @@ pub struct LeaseResponse {
     pub expires_at: DateTime<Utc>,
     pub idempotency_key: Option<String>,
     pub cost_center: Option<String>,
+}
+
+/// Optional filters for `GET /leases`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LeaseQuery {
+    pub tenant_id: Option<String>,
+    pub owner_id: Option<String>,
+    pub status: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// Labels applied to a lease via `PATCH /leases/:id/labels`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetLeaseLabelsRequest {
+    pub labels: serde_json::Value,
+}
+
+/// Request to schedule a future reservation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateReservationRequest {
+    pub pool_type: String,
+    pub owner_id: String,
+    pub tenant_id: String,
+    pub priority: Option<i32>,
+    pub ttl_seconds: i64,
+    pub constraints: Option<serde_json::Value>,
+    pub start_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReservationResponse {
+    pub id: Uuid,
+    pub pool_type: String,
+    pub owner_id: String,
+    pub tenant_id: String,
+    pub priority: i32,
+    pub ttl_seconds: i64,
+    pub start_at: DateTime<Utc>,
+    pub status: String,
+    pub lease_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Create or update a tenant quota via `PUT /quotas`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetQuotaRequest {
+    pub tenant_id: String,
+    pub pool_type: String,
+    pub max_active_leases: i32,
+    pub soft_limit: Option<i32>,
+    pub weight: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuotaResponse {
+    pub tenant_id: String,
+    pub pool_type: String,
+    pub max_active_leases: i32,
+    pub soft_limit: Option<i32>,
+    pub weight: i32,
+}
+
+/// Admin update of a resource's operational status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateResourceStatusRequest {
+    pub status: ResourceStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolUtilizationResponse {
+    pub pool_type: String,
+    pub total_resources: i64,
+    pub healthy_resources: i64,
+    pub active_leases: i64,
+    pub available: i64,
+    pub utilization_pct: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WaitlistPositionResponse {
+    pub id: Uuid,
+    pub pool_type: String,
+    pub priority: i32,
+    pub position: i64,
+    pub total_waiting: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CostReportRow {
+    pub group: String,
+    pub active_leases: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CostReport {
+    pub group_by: String,
+    pub rows: Vec<CostReportRow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

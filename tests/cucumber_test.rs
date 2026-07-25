@@ -1,4 +1,8 @@
-use atropos::application::allocation_service::AllocationService;
+// The mock repository mirrors the trait's `-> impl Future + Send` signatures verbatim,
+// so `manual_async_fn` is intentionally allowed for this test scaffold.
+#![allow(clippy::manual_async_fn, clippy::collapsible_match)]
+
+use atropos::application::allocation_service::{AllocationOutcome, AllocationService};
 use atropos::domain::repository::{AuditLogEntry, SummaryStats};
 use atropos::domain::{
     error::DomainError,
@@ -35,6 +39,12 @@ impl PoolRepository for MockRepository {
     ) -> impl Future<Output = Result<Option<Pool>, DomainError>> + Send {
         async { Ok(None) }
     }
+    fn find_by_name(
+        &self,
+        _name: &str,
+    ) -> impl Future<Output = Result<Option<Pool>, DomainError>> + Send {
+        async { Ok(None) }
+    }
 }
 impl ResourceRepository for MockRepository {
     fn create(&self, _res: Resource) -> impl Future<Output = Result<(), DomainError>> + Send {
@@ -48,6 +58,7 @@ impl ResourceRepository for MockRepository {
     }
 }
 impl AllocationRepository for MockRepository {
+    #[allow(clippy::too_many_arguments)]
     fn allocate_resource(
         &self,
         _pool: String,
@@ -59,6 +70,7 @@ impl AllocationRepository for MockRepository {
         _spread_by: Option<String>,
         key: Option<String>,
         _cost: Option<String>,
+        _preempt: bool,
     ) -> impl Future<Output = Result<Lease, DomainError>> + Send {
         let available_ref = self.available_resources.clone();
         let leases_ref = self.leases.clone();
@@ -201,13 +213,25 @@ impl AllocationRepository for MockRepository {
     ) -> impl Future<Output = Result<Option<Lease>, DomainError>> + Send {
         async { Ok(None) }
     }
+
+    fn ping(&self) -> impl Future<Output = Result<(), DomainError>> + Send {
+        async { Ok(()) }
+    }
+}
+
+/// Extracts the granted lease from an allocation outcome, panicking otherwise.
+fn expect_lease(res: &Result<AllocationOutcome, DomainError>) -> &Lease {
+    match res {
+        Ok(AllocationOutcome::Leased(lease)) => lease,
+        other => panic!("expected a granted lease, got {other:?}"),
+    }
 }
 
 // --- Cucumber World ---
 #[derive(Debug, World, Default)]
 struct AtroposWorld {
     repo: MockRepository,
-    last_results: Vec<Result<Lease, DomainError>>,
+    last_results: Vec<Result<AllocationOutcome, DomainError>>,
     last_op_result: Option<Result<(), DomainError>>,
     last_stats: Option<SummaryStats>,
     last_logs: Vec<AuditLogEntry>,
@@ -323,7 +347,8 @@ async fn request_gpu_waitlist(world: &mut AtroposWorld, team: String) {
 fn check_result(world: &mut AtroposWorld, expected: String) {
     let actual = world.last_results.last().unwrap();
     match expected.as_str() {
-        "Successful" => assert!(actual.is_ok()),
+        "Successful" => assert!(matches!(actual, Ok(AllocationOutcome::Leased(_)))),
+        "Waitlisted" => assert!(matches!(actual, Ok(AllocationOutcome::Waitlisted))),
         "Denied" => assert!(actual.is_err()),
         _ => panic!("Unknown expectation"),
     }
@@ -331,7 +356,10 @@ fn check_result(world: &mut AtroposWorld, expected: String) {
 
 #[then(expr = "a unique Lease should be issued")]
 fn check_lease(world: &mut AtroposWorld) {
-    assert!(world.last_results.last().unwrap().is_ok());
+    assert!(matches!(
+        world.last_results.last().unwrap(),
+        Ok(AllocationOutcome::Leased(_))
+    ));
 }
 
 #[then(expr = "the reason should be {string}")]
@@ -355,13 +383,13 @@ fn check_reason(world: &mut AtroposWorld, reason: String) {
 
 #[then(expr = "both responses should contain the {string} Lease ID")]
 fn check_idem(world: &mut AtroposWorld, match_type: String) {
-    let l1 = world
-        .last_results
-        .get(world.last_results.len() - 2)
-        .unwrap()
-        .as_ref()
-        .unwrap();
-    let l2 = world.last_results.last().unwrap().as_ref().unwrap();
+    let l1 = expect_lease(
+        world
+            .last_results
+            .get(world.last_results.len() - 2)
+            .unwrap(),
+    );
+    let l2 = expect_lease(world.last_results.last().unwrap());
     if match_type == "Same" {
         assert_eq!(l1.id, l2.id);
     }
@@ -377,9 +405,9 @@ async fn given_active_lease(world: &mut AtroposWorld, _status: String) {
 
 #[when(expr = "they request a renewal for {int} seconds")]
 async fn renew_lease(world: &mut AtroposWorld, sec: i32) {
-    let lease = world.last_results.last().unwrap().as_ref().unwrap();
+    let lease_id = expect_lease(world.last_results.last().unwrap()).id;
     let service = AllocationService::new(Arc::new(world.repo.clone()));
-    let res = service.renew(lease.id, sec as i64).await;
+    let res = service.renew(lease_id, sec as i64).await;
     world.last_op_result = Some(res);
 }
 
@@ -403,9 +431,9 @@ async fn release_non_existent(world: &mut AtroposWorld) {
 
 #[when(expr = "they release the active lease")]
 async fn release_active_lease(world: &mut AtroposWorld) {
-    let lease = world.last_results.last().unwrap().as_ref().unwrap();
+    let lease_id = expect_lease(world.last_results.last().unwrap()).id;
     let service = AllocationService::new(Arc::new(world.repo.clone()));
-    let res = service.release(lease.id).await;
+    let res = service.release(lease_id).await;
     world.last_op_result = Some(res);
 }
 

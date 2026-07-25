@@ -29,26 +29,30 @@ impl MaintenanceService {
 
     async fn check_resource_health(&self) {
         // Find a batch of Healthy resources to check
-        let rows = sqlx::query("SELECT id, external_id FROM resources WHERE status = 'Healthy' LIMIT 100")
-            .fetch_all(&self.pool)
-            .await;
+        let rows =
+            sqlx::query("SELECT id, external_id FROM resources WHERE status = 'Healthy' LIMIT 100")
+                .fetch_all(&self.pool)
+                .await;
 
         if let Ok(resources) = rows {
             for row in resources {
                 let id: uuid::Uuid = row.get("id");
                 let external_id: String = row.get("external_id");
-                
+
                 // Simulate checking external API (e.g. K8s Node status)
                 let is_healthy = self.ping_external_system(&external_id).await;
 
                 if !is_healthy {
-                    info!("Resource {} ({}) failed health check. Moving to Draining.", id, external_id);
+                    info!(
+                        "Resource {} ({}) failed health check. Moving to Draining.",
+                        id, external_id
+                    );
                     sqlx::query("UPDATE resources SET status = 'Draining' WHERE id = $1")
                         .bind(id)
                         .execute(&self.pool)
                         .await
                         .ok();
-                    
+
                     sqlx::query("INSERT INTO audit_log (action, resource_id, details) VALUES ('AUTO_DRAIN', $1, $2)")
                         .bind(id)
                         .bind(serde_json::json!({ "reason": "health_check_failed" }))

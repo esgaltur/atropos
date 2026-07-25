@@ -4,21 +4,26 @@ use crate::domain::{
     repository::{AllocationRepository, AuditLogEntry, PoolRepository, SummaryStats},
     LeaseId,
 };
-use moka::future::Cache;
 use std::sync::Arc;
+
+/// Result of an allocation attempt.
+///
+/// A request either results in a granted [`Lease`] or, when the pool is full
+/// and waitlisting was requested, the caller is queued and receives
+/// [`AllocationOutcome::Waitlisted`] (which the API surfaces as `202 Accepted`).
+#[derive(Debug)]
+pub enum AllocationOutcome {
+    Leased(Lease),
+    Waitlisted,
+}
 
 pub struct AllocationService<R: AllocationRepository + PoolRepository> {
     repo: Arc<R>,
-    // Optional caching layer for fast capacity checks
-    _cache: Cache<String, i64>,
 }
 
 impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
     pub fn new(repo: Arc<R>) -> Self {
-        Self {
-            repo,
-            _cache: Cache::new(1000),
-        }
+        Self { repo }
     }
 
     /// Primary entry point for allocating a resource from a pool.
@@ -35,7 +40,7 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
     /// - `ttl_seconds`: Duration in seconds for which the resource is leased.
     /// - `idempotency_key`: Optional key to prevent double-allocations on retry.
     /// - `waitlist`: If true, the request will be added to a waitlist if no resources are available.
-    /// - `preempt`: If true, the service may attempt to reclaim resources from lower-priority leases (Experimental).
+    /// - `preempt`: If true, the service may reclaim resources from lower-priority leases.
     #[allow(clippy::too_many_arguments)]
     pub async fn allocate(
         &self,
@@ -49,8 +54,8 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
         idempotency_key: Option<String>,
         waitlist: Option<bool>,
         preempt: Option<bool>,
-    ) -> Result<Lease, DomainError> {
-        // 1. Attempt allocation
+    ) -> Result<AllocationOutcome, DomainError> {
+        // 1. Attempt allocation (preemption is only attempted when explicitly requested).
         let result = self
             .repo
             .allocate_resource(
@@ -63,31 +68,24 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
                 spread_by,
                 idempotency_key.clone(),
                 None,
+                preempt.unwrap_or(false),
             )
             .await;
 
         match result {
+            Ok(lease) => Ok(AllocationOutcome::Leased(lease)),
             Err(DomainError::NoResourcesAvailable) if waitlist.unwrap_or(false) => {
                 tracing::info!(
-                    "Pool {} is full and no preemption possible. Adding {} to waitlist.",
+                    "Pool {} is full. Adding {} to waitlist.",
                     pool_type,
                     owner_id
                 );
                 self.repo
-                    .waitlist_resource(
-                        pool_type, owner_id, tenant_id, priority,
-                    )
+                    .waitlist_resource(pool_type, owner_id, tenant_id, priority)
                     .await?;
-                Err(DomainError::InfrastructureError(
-                    "Added to waitlist".to_string(),
-                ))
+                Ok(AllocationOutcome::Waitlisted)
             }
-            Err(DomainError::NoResourcesAvailable) if preempt.unwrap_or(false) => {
-                Err(DomainError::InfrastructureError(
-                    "Preemption required but logic in repo is pending".to_string(),
-                ))
-            }
-            other => other,
+            Err(e) => Err(e),
         }
     }
 
@@ -128,5 +126,10 @@ impl<R: AllocationRepository + PoolRepository> AllocationService<R> {
     /// Retrieves a list of recent audit log entries for resource lifecycle events.
     pub async fn get_recent_logs(&self, limit: i64) -> Result<Vec<AuditLogEntry>, DomainError> {
         self.repo.get_recent_audit_logs(limit).await
+    }
+
+    /// Verifies backing-store connectivity for readiness/health probes.
+    pub async fn health(&self) -> Result<(), DomainError> {
+        self.repo.ping().await
     }
 }

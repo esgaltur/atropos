@@ -52,7 +52,7 @@ jobs:
     - name: Run Database Migrations
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/resource_allocator
-      run: sqlx migrate run
+      run: sqlx migrate run --source infra/migrations
 
     - name: Run Tests
       env:

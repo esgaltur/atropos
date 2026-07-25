@@ -13,13 +13,13 @@ pub struct Pool {
     pub resource_type: String,
     /// The policy governing how resources are allocated from this pool.
     pub policy: AllocationPolicy,
+    /// Optional hard cap on how many resources may be registered in this pool.
+    pub max_capacity: Option<i32>,
     /// Timestamp when the pool was created.
     pub created_at: DateTime<Utc>,
 }
 
 impl Pool {
-    // TODO(esgaltur): I'm thinking about adding a `max_capacity` field here
-    // to limit how many resources can be added to a pool.
     /// Creates a new resource pool with a unique ID and current timestamp.
     pub fn new(name: String, resource_type: String, policy: AllocationPolicy) -> Self {
         Self {
@@ -27,7 +27,14 @@ impl Pool {
             name,
             resource_type,
             policy,
+            max_capacity: None,
             created_at: Utc::now(),
         }
+    }
+
+    /// Sets an optional maximum resource capacity for the pool.
+    pub fn with_max_capacity(mut self, max_capacity: Option<i32>) -> Self {
+        self.max_capacity = max_capacity;
+        self
     }
 }

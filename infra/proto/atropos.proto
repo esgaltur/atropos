@@ -14,6 +14,9 @@ message AllocateRequest {
     optional string idempotency_key = 5;
     bool waitlist = 6;
     bool preempt = 7;
+    optional int32 priority = 8;
+    // JSON-encoded attribute constraints (e.g. {"vram_gb": 80}).
+    optional string constraints = 9;
 }
 
 message AllocateResponse {

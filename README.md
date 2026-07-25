@@ -97,6 +97,10 @@ For deep technical insights, Architecture Decision Records (ADRs), and operation
 
 ## 📖 API Documentation
 
+> **Authentication:** When `ATROPOS_API_TOKEN` is set, all mutating endpoints
+> (and the gRPC `AllocationService`) require `Authorization: Bearer <token>`.
+> Read-only endpoints (dashboard, `/health`, pool lookup) remain public.
+
 ### Allocate a Lease
 `POST /leases`
 ```json
@@ -104,12 +108,74 @@ For deep technical insights, Architecture Decision Records (ADRs), and operation
   "pool_type": "A100-Cluster",
   "owner_id": "team-alpha",
   "tenant_id": "project-omega",
-  "ttl_seconds": 3600
+  "ttl_seconds": 3600,
+  "priority": 100,
+  "waitlist": true,
+  "preempt": false,
+  "idempotency_key": "optional-retry-safe-key"
 }
 ```
+Responses:
+* `200 OK` — lease granted (returns the `Lease`).
+* `202 Accepted` — pool full and the request was queued on the waitlist.
+* `409 Conflict` — no resources available (and not waitlisted).
+* `429 Too Many Requests` — tenant quota exceeded.
+
+Retries carrying the same `idempotency_key` return the original active lease
+instead of creating a duplicate. Preemption of lower-priority leases only occurs
+when `"preempt": true` is supplied.
 
 ### Release a Lease
 `DELETE /leases/:id`
+
+### Look up a Pool
+`GET /pools/:name`
+
+### Query Leases
+`GET /leases?tenant_id=&owner_id=&status=&limit=` — list leases with optional filters.
+`GET /leases/:id` — fetch a single lease.
+
+### Pools & Capacity
+Pools accept an optional `max_capacity` on creation (`POST /pools`). Once a pool
+holds that many resources, `POST /resources` returns `409 Conflict`.
+`GET /pools/:name/utilization` reports total/healthy resources, active leases,
+availability and a utilization percentage.
+
+### Quotas (weighted / soft limits)
+`PUT /quotas` upserts a tenant quota:
+```json
+{
+  "tenant_id": "project-omega",
+  "pool_type": "A100-Cluster",
+  "max_active_leases": 10,
+  "soft_limit": 8,
+  "weight": 5
+}
+```
+`GET /quotas/:tenant_id/:pool_type` reads it back.
+
+### Reservations (future capacity)
+`POST /reservations` schedules capacity for a future `start_at`; a background
+promoter allocates a real lease when it becomes due (`FULFILLED`/`FAILED`).
+`GET /reservations/:id` reports status and the resulting `lease_id`.
+
+### Resource Status
+`PATCH /resources/:id/status` sets a resource's operational status
+(`Healthy`, `Unhealthy`, `Draining`, `Disabled`, `Cooldown`).
+
+### Waitlist Position
+`GET /waitlist/:id` returns a queued request's position and the total waiting,
+using the same priority-aging order the fulfiller applies.
+
+### Labels & Cost Reporting
+`PATCH /leases/:id/labels` attaches arbitrary JSON labels to a lease.
+`GET /reports/cost?group_by=tenant|cost_center` aggregates active leases.
+
+### Webhooks
+Lease-granted/revoked events are delivered to rows in the `webhooks` table
+matching the event type (or `*`). When `ATROPOS_WEBHOOK_SECRET` is set, bodies
+are signed with HMAC-SHA256 (`X-Atropos-Signature`). Delivery failures are
+retried and dead-lettered by the outbox worker.
 
 ---
 

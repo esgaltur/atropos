@@ -10,8 +10,8 @@ pub enum DomainError {
     LeaseNotFound,
     #[error("No resources available for allocation")]
     NoResourcesAvailable,
-    #[error("Quota exceeded")]
-    QuotaExceeded,
+    #[error("Tenant quota exceeded: {0}")]
+    QuotaExceeded(String),
     #[error("Infrastructure error: {0}")]
     InfrastructureError(String),
 }

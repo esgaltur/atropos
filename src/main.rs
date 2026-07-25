@@ -7,9 +7,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use atropos::api::routes::{create_router, AppState};
 use atropos::application::{
-    allocation_service::AllocationService, maintenance::MaintenanceService,
-    outbox::OutboxService, pool_service::PoolService, reaper::ReaperService,
-    resource_service::ResourceService,
+    allocation_service::AllocationService, maintenance::MaintenanceService, outbox::OutboxService,
+    platform_service::PlatformService, pool_service::PoolService, reaper::ReaperService,
+    reservation_service::ReservationService, resource_service::ResourceService,
 };
 use atropos::infrastructure::postgres_repository::PostgresRepository;
 
@@ -37,14 +37,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Connecting to database...");
     let pool = PgPoolOptions::new()
         .max_connections(100) // Tuned for higher concurrency
+        .min_connections(5) // Keep warm connections ready
+        .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&database_url)
         .await?;
+
+    // 3b. AUTH CONFIGURATION
+    if atropos::api::auth::configured_token().is_none() {
+        tracing::warn!(
+            "{} is not set: API and gRPC mutating endpoints are UNAUTHENTICATED (dev mode).",
+            atropos::api::auth::API_TOKEN_ENV
+        );
+    } else {
+        tracing::info!("Bearer-token authentication enabled for mutating endpoints.");
+    }
 
     // 4. DEPENDENCY INJECTION (Composition Root)
     let repo = Arc::new(PostgresRepository::new(pool.clone()));
     let pool_service = Arc::new(PoolService::new(repo.clone()));
     let resource_service = Arc::new(ResourceService::new(repo.clone()));
     let allocation_service = Arc::new(AllocationService::new(repo.clone()));
+    let platform_service = Arc::new(PlatformService::new(repo.clone()));
 
     // 5. BACKGROUND REAPER with Cancellation
     let reaper = ReaperService::new(pool.clone(), repo.clone());
@@ -67,10 +80,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         outbox.run().await;
     });
 
+    // 5d. BACKGROUND RESERVATION PROMOTER
+    let reservation = ReservationService::new(repo.clone());
+    let reservation_handle = tokio::spawn(async move {
+        tracing::info!("Starting background Reservation Service...");
+        reservation.run().await;
+    });
+
     let app_state = AppState {
         pool_service,
         resource_service,
         allocation_service: allocation_service.clone(),
+        platform_service,
     };
 
     let app = create_router(app_state);
@@ -82,8 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let grpc_server = tonic::transport::Server::builder()
         .add_service(
-            atropos::api::grpc::atropos_v1::allocation_service_server::AllocationServiceServer::new(
+            atropos::api::grpc::atropos_v1::allocation_service_server::AllocationServiceServer::with_interceptor(
                 grpc_service,
+                atropos::api::grpc::check_auth,
             ),
         )
         .serve(grpc_addr);
@@ -103,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     reaper_handle.abort();
     maintenance_handle.abort();
     outbox_handle.abort();
+    reservation_handle.abort();
 
     Ok(())
 }

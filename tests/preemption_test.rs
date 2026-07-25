@@ -1,4 +1,4 @@
-use atropos::application::allocation_service::AllocationService;
+use atropos::application::allocation_service::{AllocationOutcome, AllocationService};
 use atropos::infrastructure::postgres_repository::PostgresRepository;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -16,11 +16,26 @@ async fn test_priority_preemption_logic() {
         .expect("Failed to connect to DB");
 
     // Clean up
-    sqlx::query("DELETE FROM audit_log").execute(&pool).await.unwrap();
-    sqlx::query("DELETE FROM waitlist_entries").execute(&pool).await.unwrap();
-    sqlx::query("DELETE FROM leases").execute(&pool).await.unwrap();
-    sqlx::query("DELETE FROM resources").execute(&pool).await.unwrap();
-    sqlx::query("DELETE FROM pools").execute(&pool).await.unwrap();
+    sqlx::query("DELETE FROM audit_log")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM waitlist_entries")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM leases")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM resources")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM pools")
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let repo = Arc::new(PostgresRepository::new(pool.clone()));
     let service = AllocationService::new(repo.clone());
@@ -32,46 +47,66 @@ async fn test_priority_preemption_logic() {
         .bind(pool_id)
         .bind("Preempt-Pool")
         .bind(&pool_type)
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let res_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO resources (id, pool_id, external_id, status) VALUES ($1, $2, $3, 'Healthy')")
-        .bind(res_id)
-        .bind(pool_id)
-        .bind("preempt-res-1")
-        .execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO resources (id, pool_id, external_id, status) VALUES ($1, $2, $3, 'Healthy')",
+    )
+    .bind(res_id)
+    .bind(pool_id)
+    .bind("preempt-res-1")
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // 2. Step: Allocate with Priority 10 (Low)
-    let lease_low = service.allocate(
-        pool_type.clone(), 
-        "low-user".into(), 
-        "t1".into(), 
-        10, 
-        600, 
-        None, 
-        None,
-        None,
-        Some(false), 
-        Some(false)
-    ).await.expect("Low priority allocation should succeed");
+    let lease_low = match service
+        .allocate(
+            pool_type.clone(),
+            "low-user".into(),
+            "t1".into(),
+            10,
+            600,
+            None,
+            None,
+            None,
+            Some(false),
+            Some(false),
+        )
+        .await
+        .expect("Low priority allocation should succeed")
+    {
+        AllocationOutcome::Leased(l) => l,
+        AllocationOutcome::Waitlisted => panic!("expected a lease, got waitlisted"),
+    };
 
     assert_eq!(lease_low.owner_id, "low-user");
     assert_eq!(lease_low.priority, 10);
 
     // 3. Step: Allocate with Priority 100 (High) AND preempt = true
     // This should evict low-user
-    let lease_high = service.allocate(
-        pool_type.clone(), 
-        "high-user".into(), 
-        "t1".into(), 
-        100, 
-        600, 
-        None, 
-        None,
-        None,
-        Some(false), 
-        Some(true)
-    ).await.expect("High priority allocation with preemption should succeed");
+    let lease_high = match service
+        .allocate(
+            pool_type.clone(),
+            "high-user".into(),
+            "t1".into(),
+            100,
+            600,
+            None,
+            None,
+            None,
+            Some(false),
+            Some(true),
+        )
+        .await
+        .expect("High priority allocation with preemption should succeed")
+    {
+        AllocationOutcome::Leased(l) => l,
+        AllocationOutcome::Waitlisted => panic!("expected a lease, got waitlisted"),
+    };
 
     assert_eq!(lease_high.owner_id, "high-user");
     assert_eq!(lease_high.priority, 100);
@@ -80,30 +115,40 @@ async fn test_priority_preemption_logic() {
     // 4. Assert: Old lease is REVOKED
     let (old_status,): (String,) = sqlx::query_as("SELECT status FROM leases WHERE id = $1")
         .bind(lease_low.id.0)
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(old_status, "REVOKED");
 
     // 5. Step: Try to allocate with Priority 50 (Medium) AND preempt = true
     // This should FAIL because high-user (100) is currently holding it.
-    let result_mid = service.allocate(
-        pool_type.clone(), 
-        "mid-user".into(), 
-        "t1".into(), 
-        50, 
-        600, 
-        None, 
-        None,
-        None,
-        Some(false), 
-        Some(true)
-    ).await;
+    let result_mid = service
+        .allocate(
+            pool_type.clone(),
+            "mid-user".into(),
+            "t1".into(),
+            50,
+            600,
+            None,
+            None,
+            None,
+            Some(false),
+            Some(true),
+        )
+        .await;
 
-    assert!(result_mid.is_err(), "Medium priority should NOT be able to preempt High priority");
+    assert!(
+        result_mid.is_err(),
+        "Medium priority should NOT be able to preempt High priority"
+    );
 
     // 6. Assert Audit Logs
-    let logs: Vec<(String,)> = sqlx::query_as("SELECT action FROM audit_log ORDER BY created_at ASC")
-        .fetch_all(&pool).await.unwrap();
-    
+    let logs: Vec<(String,)> =
+        sqlx::query_as("SELECT action FROM audit_log ORDER BY created_at ASC")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
     // Expect: ALLOCATE (low), PREEMPT_REVOKE (low), PREEMPT_ALLOCATE (high)
     let actions: Vec<String> = logs.into_iter().map(|l| l.0).collect();
     assert!(actions.contains(&"ALLOCATE".to_string()));

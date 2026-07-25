@@ -102,4 +102,5 @@ pub mod error;
 pub mod lease;
 pub mod pool;
 pub mod repository;
+pub mod reservation;
 pub mod resource;

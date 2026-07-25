@@ -76,24 +76,27 @@ mod tests {
     use super::*;
     use crate::{
         application::{
-            allocation_service::AllocationService, pool_service::PoolService,
-            resource_service::ResourceService,
+            allocation_service::AllocationService, platform_service::PlatformService,
+            pool_service::PoolService, resource_service::ResourceService,
         },
         domain::{
             error::DomainError,
             lease::Lease,
             pool::Pool,
             repository::{
-                AllocationRepository, AuditLogEntry, PoolRepository, ResourceRepository,
-                SummaryStats,
+                AllocationRepository, AuditLogEntry, CostGroupBy, CostRow, LeaseFilter,
+                PlatformRepository, PoolRepository, PoolUtilization, QuotaRecord,
+                ResourceRepository, SummaryStats, WaitlistPosition,
             },
+            reservation::Reservation,
             resource::Resource,
-            LeaseId, PoolId, ResourceId,
+            LeaseId, PoolId, ResourceId, ResourceStatus,
         },
     };
     use axum::body::to_bytes;
     use chrono::Utc;
     use std::{future::ready, sync::Arc};
+    use uuid::Uuid;
 
     struct FakeRepository {
         stats: Option<SummaryStats>,
@@ -111,6 +114,13 @@ mod tests {
         fn find_by_id(
             &self,
             _id: &PoolId,
+        ) -> impl std::future::Future<Output = Result<Option<Pool>, DomainError>> + Send {
+            ready(Ok(None))
+        }
+
+        fn find_by_name(
+            &self,
+            _name: &str,
         ) -> impl std::future::Future<Output = Result<Option<Pool>, DomainError>> + Send {
             ready(Ok(None))
         }
@@ -134,6 +144,7 @@ mod tests {
     }
 
     impl AllocationRepository for FakeRepository {
+        #[allow(clippy::too_many_arguments)]
         fn allocate_resource(
             &self,
             _pool_type: String,
@@ -145,6 +156,7 @@ mod tests {
             _spread_by: Option<String>,
             _idempotency_key: Option<String>,
             _cost_center: Option<String>,
+            _preempt: bool,
         ) -> impl std::future::Future<Output = Result<Lease, DomainError>> + Send {
             ready(Err(DomainError::InfrastructureError(
                 "not used in ui tests".to_string(),
@@ -219,6 +231,127 @@ mod tests {
                 "not used in ui tests".to_string(),
             )))
         }
+
+        fn ping(&self) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
+    }
+
+    impl PlatformRepository for FakeRepository {
+        fn list_leases(
+            &self,
+            _filter: LeaseFilter,
+        ) -> impl std::future::Future<Output = Result<Vec<Lease>, DomainError>> + Send {
+            ready(Ok(Vec::new()))
+        }
+
+        fn find_lease_by_id(
+            &self,
+            _id: &LeaseId,
+        ) -> impl std::future::Future<Output = Result<Option<Lease>, DomainError>> + Send {
+            ready(Ok(None))
+        }
+
+        fn set_lease_labels(
+            &self,
+            _id: &LeaseId,
+            _labels: serde_json::Value,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
+
+        fn upsert_quota(
+            &self,
+            _quota: QuotaRecord,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
+
+        fn get_quota(
+            &self,
+            _tenant_id: &str,
+            _pool_type: &str,
+        ) -> impl std::future::Future<Output = Result<Option<QuotaRecord>, DomainError>> + Send
+        {
+            ready(Ok(None))
+        }
+
+        fn update_resource_status(
+            &self,
+            _id: &ResourceId,
+            _status: ResourceStatus,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
+
+        fn count_resources_in_pool(
+            &self,
+            _pool_id: &PoolId,
+        ) -> impl std::future::Future<Output = Result<i64, DomainError>> + Send {
+            ready(Ok(0))
+        }
+
+        fn get_pool_utilization(
+            &self,
+            _pool_type: &str,
+        ) -> impl std::future::Future<Output = Result<PoolUtilization, DomainError>> + Send
+        {
+            ready(Ok(PoolUtilization::default()))
+        }
+
+        fn get_waitlist_position(
+            &self,
+            _id: &Uuid,
+        ) -> impl std::future::Future<Output = Result<Option<WaitlistPosition>, DomainError>> + Send
+        {
+            ready(Ok(None))
+        }
+
+        fn cost_report(
+            &self,
+            _group_by: CostGroupBy,
+        ) -> impl std::future::Future<Output = Result<Vec<CostRow>, DomainError>> + Send {
+            ready(Ok(Vec::new()))
+        }
+
+        fn create_reservation(
+            &self,
+            _reservation: Reservation,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
+
+        fn get_reservation(
+            &self,
+            _id: &Uuid,
+        ) -> impl std::future::Future<Output = Result<Option<Reservation>, DomainError>> + Send
+        {
+            ready(Ok(None))
+        }
+
+        fn list_due_reservations(
+            &self,
+            _limit: i64,
+        ) -> impl std::future::Future<Output = Result<Vec<Reservation>, DomainError>> + Send
+        {
+            ready(Ok(Vec::new()))
+        }
+
+        fn complete_reservation(
+            &self,
+            _id: &Uuid,
+            _lease_id: &LeaseId,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
+
+        fn fail_reservation(
+            &self,
+            _id: &Uuid,
+            _error: &str,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
     }
 
     fn build_state(repo: FakeRepository) -> AppState<FakeRepository> {
@@ -226,7 +359,8 @@ mod tests {
         AppState {
             pool_service: Arc::new(PoolService::new(repo.clone())),
             resource_service: Arc::new(ResourceService::new(repo.clone())),
-            allocation_service: Arc::new(AllocationService::new(repo)),
+            allocation_service: Arc::new(AllocationService::new(repo.clone())),
+            platform_service: Arc::new(PlatformService::new(repo)),
         }
     }
 
