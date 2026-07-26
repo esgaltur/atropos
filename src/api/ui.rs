@@ -163,6 +163,10 @@ mod tests {
             )))
         }
 
+        fn ping(&self) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
+        }
+
         fn release_lease(
             &self,
             _lease_id: &LeaseId,
@@ -182,13 +186,6 @@ mod tests {
             )))
         }
 
-        fn heartbeat_lease(
-            &self,
-            _lease_id: &LeaseId,
-        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
-            ready(Ok(()))
-        }
-
         fn waitlist_resource(
             &self,
             _pool_type: String,
@@ -199,6 +196,13 @@ mod tests {
             ready(Err(DomainError::InfrastructureError(
                 "not used in ui tests".to_string(),
             )))
+        }
+
+        fn heartbeat_lease(
+            &self,
+            _lease_id: &LeaseId,
+        ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
+            ready(Ok(()))
         }
 
         fn get_summary_stats(
@@ -230,10 +234,6 @@ mod tests {
             ready(Err(DomainError::InfrastructureError(
                 "not used in ui tests".to_string(),
             )))
-        }
-
-        fn ping(&self) -> impl std::future::Future<Output = Result<(), DomainError>> + Send {
-            ready(Ok(()))
         }
     }
 

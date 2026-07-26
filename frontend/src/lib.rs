@@ -3,8 +3,7 @@ use leptos::*;
 
 const HTMX_URL: &str = "https://unpkg.com/htmx.org@1.9.10";
 const TAILWIND_CDN_URL: &str = "https://cdn.tailwindcss.com";
-const FONT_AWESOME_URL: &str =
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css";
+const FONT_AWESOME_URL: &str = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css";
 
 pub fn render_dashboard(stats: DashboardStats, logs: Vec<AuditLogItem>) -> String {
     leptos::ssr::render_to_string(move || {
